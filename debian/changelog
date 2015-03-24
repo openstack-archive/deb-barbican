@@ -1,0 +1,5 @@
+barbican (2015.1~b3+git20150324+ac34f4662b-1) unstable; urgency=medium
+
+  * Initial release (Closes: #XXXXXX).
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 23 Mar 2015 17:46:24 +0100

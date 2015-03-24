@@ -1,0 +1,7 @@
+/var/log/barbican/*.log {
+    daily
+    missingok
+    compress
+    delaycompress
+    copytruncate
+}

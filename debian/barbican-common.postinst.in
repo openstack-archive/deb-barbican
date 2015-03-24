@@ -1,0 +1,20 @@
+#!/bin/sh
+
+set -e
+
+#PKGOS-INCLUDE#
+
+if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
+	. /usr/share/debconf/confmodule
+	. /usr/share/dbconfig-common/dpkg/postinst
+
+	pkgos_var_user_group barbican
+
+	# Manage the configuration file
+
+	# This package needs this:
+	mkdir -p /var/lib/barbican/temp
+	chown barbican:barbican /var/lib/barbican/temp
+fi
+
+#DEBHELPER#
