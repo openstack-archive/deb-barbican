@@ -18,7 +18,7 @@ ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 endif
 
 override_dh_auto_install:
-	python setup.py install --root=debian/barbican-common --install-layout=deb
+	python setup.py install --root=debian/tmp --install-layout=deb
 
 override_dh_sphinxdoc:
 ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))
