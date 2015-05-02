@@ -2,7 +2,7 @@
 
 set -e
 
-if [ "$1" = "purge" ] ; do
+if [ "$1" = "purge" ] ; then
 	echo "Purging barbican. Backup of /var/lib/barbican can be found at /var/lib/barbican.tar.bz2" >&2
 	[ -e /var/lib/barbican ] && rm -rf /var/lib/barbican
 	[ -e /var/log/barbican ] && rm -rf /var/log/barbican
