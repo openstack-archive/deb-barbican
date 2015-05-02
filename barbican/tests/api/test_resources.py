@@ -23,7 +23,6 @@ import mimetypes
 
 import mock
 import pecan
-from six import moves
 from testtools import testcase
 import webtest
 
@@ -35,7 +34,6 @@ from barbican.common import hrefs
 from barbican.common import utils as barbican_utils
 import barbican.context
 from barbican.model import models
-from barbican.tests import database_utils
 from barbican.tests import utils
 
 
@@ -96,7 +94,7 @@ def validate_datum(test, datum):
     test.assertIsNotNone(datum.kek_meta_project.kek_label)
 
 
-def create_container(id_ref):
+def create_container(id_ref, project_id=None, external_project_id=None):
     """Generate a Container entity instance."""
     container = models.Container()
     container.id = id_ref
@@ -106,6 +104,12 @@ def create_container(id_ref):
     container_secret.container_id = id
     container_secret.secret_id = '123'
     container.container_secrets.append(container_secret)
+
+    if project_id:
+        project = models.Project()
+        project.id = project_id
+        project.external_id = external_project_id
+        container.project = project
     return container
 
 
@@ -200,6 +204,7 @@ class BaseSecretsResource(FunctionalTest):
         self.secret_req = {'name': self.name,
                            'algorithm': self.secret_algorithm,
                            'bit_length': self.secret_bit_length,
+                           'creator_id': None,
                            'mode': self.secret_mode}
         if payload:
             self.secret_req['payload'] = payload
@@ -321,6 +326,11 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
                                     encrypted_datum=self.datum,
                                     content_type=self.datum.content_type)
 
+        self.secret.secret_acls = []
+        self.secret.project_assocs = [mock.MagicMock()]
+        secret_project = self.secret.project_assocs[0].projects
+        secret_project.external_id = self.external_project_id
+
         # Set up mocked project
         self.project = models.Project()
         self.project.id = self.project_id
@@ -336,6 +346,7 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
         # Set up mocked secret repo
         self.secret_repo = mock.Mock()
         self.secret_repo.get = mock.Mock(return_value=self.secret)
+        self.secret_repo.get_secret_by_id = mock.Mock(return_value=self.secret)
         self.secret_repo.delete_entity_by_id = mock.Mock(return_value=None)
         self.setup_secret_repository_mock(self.secret_repo)
 
@@ -373,9 +384,8 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
             '/secrets/{0}/'.format(self.secret.id),
             headers={'Accept': 'application/json', 'Accept-Encoding': 'gzip'}
         )
-        self.secret_repo.get.assert_called_once_with(
+        self.secret_repo.get_secret_by_id.assert_called_once_with(
             entity_id=self.secret.id,
-            external_project_id=self.external_project_id,
             suppress_exception=True)
         self.assertEqual(resp.status_int, 200)
 
@@ -397,9 +407,8 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
             headers={'Accept': 'text/plain'}
         )
 
-        self.secret_repo.get.assert_called_once_with(
+        self.secret_repo.get_secret_by_id.assert_called_once_with(
             entity_id=self.secret.id,
-            external_project_id=self.external_project_id,
             suppress_exception=True)
         self.assertEqual(resp.status_int, 200)
 
@@ -425,9 +434,8 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
             headers={'Accept': 'text/plain'}
         )
 
-        self.secret_repo.get.assert_called_once_with(
+        self.secret_repo.get_secret_by_id.assert_called_once_with(
             entity_id=self.secret.id,
-            external_project_id=self.external_project_id,
             suppress_exception=True)
         self.assertEqual(resp.status_int, 200)
 
@@ -455,9 +463,8 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
             headers={'Accept': 'text/plain'}
         )
 
-        self.secret_repo.get.assert_called_once_with(
+        self.secret_repo.get_secret_by_id.assert_called_once_with(
             entity_id=self.secret.id,
-            external_project_id=self.external_project_id,
             suppress_exception=True)
         self.assertEqual(resp.status_int, 200)
 
@@ -484,9 +491,8 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
             expect_errors=True
         )
 
-        self.secret_repo.get.assert_called_once_with(
+        self.secret_repo.get_secret_by_id.assert_called_once_with(
             entity_id=self.secret.id,
-            external_project_id=self.external_project_id,
             suppress_exception=True)
         self.assertEqual(resp.status_int, 400)
 
@@ -505,9 +511,8 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
             expect_errors=True
         )
 
-        self.secret_repo.get.assert_called_once_with(
+        self.secret_repo.get_secret_by_id.assert_called_once_with(
             entity_id=self.secret.id,
-            external_project_id=self.external_project_id,
             suppress_exception=True)
         self.assertEqual(resp.status_int, 400)
 
@@ -525,9 +530,8 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
             headers={'Accept': 'application/json', 'Accept-Encoding': 'gzip'}
         )
 
-        self.secret_repo.get.assert_called_once_with(
+        self.secret_repo.get_secret_by_id.assert_called_once_with(
             entity_id=self.secret.id,
-            external_project_id=self.external_project_id,
             suppress_exception=True)
 
         self.assertEqual(resp.status_int, 200)
@@ -553,9 +557,8 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
             headers={'Accept': 'application/json', 'Accept-Encoding': 'gzip'}
         )
 
-        self.secret_repo.get.assert_called_once_with(
+        self.secret_repo.get_secret_by_id.assert_called_once_with(
             entity_id=self.secret.id,
-            external_project_id=self.external_project_id,
             suppress_exception=True)
 
         self.assertEqual(resp.status_int, 200)
@@ -602,6 +605,7 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
     @mock.patch('barbican.plugin.resources.store_secret')
     def test_should_put_secret_as_plain_with_tkey_id(self, mock_store_secret):
         self.secret.encrypted_data = []
+        self.secret.secret_store_metadata = {}
 
         resp = self.app.put(
             '/secrets/{0}/?transport_key_id={1}'.format(
@@ -613,17 +617,18 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
         self.assertEqual(resp.status_int, 204)
 
         mock_store_secret.assert_called_once_with(
-            'plain text',
-            'text/plain', None,
-            self.secret.to_dict_fields(),
-            self.secret,
-            self.project,
+            unencrypted_raw='plain text',
+            content_type_raw='text/plain',
+            content_encoding=None,
+            secret_model=self.secret,
+            project_model=self.project,
             transport_key_id=self.transport_key_id
         )
 
     @mock.patch('barbican.plugin.resources.store_secret')
     def test_should_put_secret_as_binary_with_tkey_id(self, mock_store_secret):
         self.secret.encrypted_data = []
+        self.secret.secret_store_metadata = {}
 
         resp = self.app.put(
             '/secrets/{0}/?transport_key_id={1}'.format(
@@ -638,589 +643,13 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
         self.assertEqual(resp.status_int, 204)
 
         mock_store_secret.assert_called_once_with(
-            'plain text',
-            'application/octet-stream',
-            None,
-            self.secret.to_dict_fields(),
-            self.secret,
-            self.project,
+            unencrypted_raw='plain text',
+            content_type_raw='application/octet-stream',
+            content_encoding=None,
+            secret_model=self.secret,
+            project_model=self.project,
             transport_key_id=self.transport_key_id
         )
-
-
-class WhenGettingOrdersListUsingOrdersResource(FunctionalTest):
-    def setUp(self):
-        super(
-            WhenGettingOrdersListUsingOrdersResource, self
-        ).setUp()
-        self.app = webtest.TestApp(app.build_wsgi_app(self.root))
-        self.app.extra_environ = get_barbican_env(self.external_project_id)
-
-        database_utils.setup_in_memory_db()
-        self.addCleanup(database_utils.in_memory_cleanup)
-
-    @property
-    def root(self):
-        self._init()
-
-        class RootController(object):
-            orders = controllers.orders.OrdersController(self.queue_resource)
-
-        return RootController()
-
-    def _init(self):
-        self.project_id = 'project1234'
-        self.external_project_id = 'keystoneid1234'
-        self.name = 'name1234'
-        self.mime_type = 'text/plain'
-        self.secret_algorithm = "algo"
-        self.secret_bit_length = 512
-        self.secret_mode = "cytype"
-        self.params = {'offset': 2, 'limit': 2}
-
-        self.num_orders = 10
-        self.offset = 2
-        self.limit = 2
-
-        order_meta = {'name': self.name,
-                      'algorithm': self.secret_algorithm,
-                      'bit_length': self.secret_bit_length,
-                      'mode': self.secret_mode}
-
-        self.orders = [create_order_with_meta(id_ref='id' + str(id),
-                                              order_type='key',
-                                              meta=order_meta) for
-                       id in moves.range(self.num_orders)]
-        self.total = len(self.orders)
-        self.order_repo = mock.MagicMock()
-        self.order_repo.get_by_create_date.return_value = (self.orders,
-                                                           self.offset,
-                                                           self.limit,
-                                                           self.total)
-
-        self.setup_order_repository_mock(self.order_repo)
-        self.setup_project_repository_mock()
-
-        self.queue_resource = mock.MagicMock()
-        self.queue_resource.process_order.return_value = None
-
-        self.params = {
-            'offset': self.offset,
-            'limit': self.limit
-        }
-
-    def test_should_get_list_orders(self):
-        resp = self.app.get('/orders/', self.params)
-
-        self.order_repo.get_by_create_date.assert_called_once_with(
-            self.external_project_id,
-            offset_arg=u'{0}'.format(self.offset),
-            limit_arg=u'{0}'.format(self.limit),
-            suppress_exception=True
-        )
-
-        self.assertTrue('previous' in resp.namespace)
-        self.assertTrue('next' in resp.namespace)
-
-        url_nav_next = self._create_url(self.external_project_id,
-                                        self.offset + self.limit, self.limit)
-        self.assertTrue(resp.body.count(url_nav_next) == 1)
-
-        url_nav_prev = self._create_url(self.external_project_id,
-                                        0, self.limit)
-        self.assertTrue(resp.body.count(url_nav_prev) == 1)
-
-        url_hrefs = self._create_url(self.external_project_id)
-        self.assertTrue(resp.body.count(url_hrefs) ==
-                        (self.num_orders + 2))
-
-    def test_response_should_include_total(self):
-        resp = self.app.get('/orders/', self.params)
-        self.assertIn('total', resp.namespace)
-        self.assertEqual(resp.namespace['total'], self.total)
-
-    def test_should_handle_no_orders(self):
-
-        del self.orders[:]
-
-        resp = self.app.get('/orders/', self.params)
-
-        self.order_repo.get_by_create_date.assert_called_once_with(
-            self.external_project_id,
-            offset_arg=u'{0}'.format(self.offset),
-            limit_arg=u'{0}'.format(self.limit),
-            suppress_exception=True
-        )
-
-        self.assertFalse('previous' in resp.namespace)
-        self.assertFalse('next' in resp.namespace)
-
-    def _create_url(self, external_project_id, offset_arg=None,
-                    limit_arg=None):
-        if limit_arg:
-            offset = int(offset_arg)
-            limit = int(limit_arg)
-            return '/orders?limit={0}&offset={1}'.format(limit,
-                                                         offset)
-        else:
-            return '/orders'
-
-
-class WhenGettingOrDeletingOrderUsingOrderResource(FunctionalTest):
-    def setUp(self):
-        super(
-            WhenGettingOrDeletingOrderUsingOrderResource, self
-        ).setUp()
-        self.app = webtest.TestApp(app.build_wsgi_app(self.root))
-        self.app.extra_environ = get_barbican_env(self.external_project_id)
-
-        database_utils.setup_in_memory_db()
-        self.addCleanup(database_utils.in_memory_cleanup)
-
-    @property
-    def root(self):
-        self._init()
-
-        class RootController(object):
-            orders = controllers.orders.OrdersController(self.queue_resource)
-
-        return RootController()
-
-    def _init(self):
-        self.external_project_id = 'keystoneid1234'
-        self.requestor = 'requestor1234'
-
-        self.order = create_order_with_meta(
-            id_ref=utils.generate_test_uuid(tail_value=1),
-            order_type='key',
-            meta='{"name":"just_test"}'
-        )
-
-        self.order_repo = mock.MagicMock()
-        self.order_repo.get.return_value = self.order
-        self.order_repo.save.return_value = None
-        self.order_repo.delete_entity_by_id.return_value = None
-
-        self.setup_order_repository_mock(self.order_repo)
-        self.setup_project_repository_mock()
-
-        self.queue_resource = mock.MagicMock()
-
-    def test_should_get_order(self):
-        self.app.get('/orders/{0}/'.format(self.order.id))
-
-        self.order_repo.get.assert_called_once_with(
-            entity_id=self.order.id,
-            external_project_id=self.external_project_id,
-            suppress_exception=True)
-
-    def test_should_delete_order(self):
-        self.app.delete('/orders/{0}/'.format(self.order.id))
-        self.order_repo.delete_entity_by_id.assert_called_once_with(
-            entity_id=self.order.id,
-            external_project_id=self.external_project_id)
-
-    def test_should_404_for_get_when_order_not_found(self):
-        self.order_repo.get.return_value = None
-        resp = self.app.get(
-            '/orders/{0}/'.format(self.order.id),
-            expect_errors=True
-        )
-        self.assertEqual(resp.status_int, 404)
-
-    def test_should_404_for_delete_when_order_not_found(self):
-        self.order_repo.get.return_value = None
-        resp = self.app.delete(
-            '/orders/{0}/'.format(self.order.id),
-            expect_errors=True
-        )
-        self.assertEqual(resp.status_int, 404)
-        # Error response should have json content type
-        self.assertEqual(resp.content_type, "application/json")
-
-
-class WhenPuttingOrderWithMetadataUsingOrderResource(FunctionalTest):
-
-    def setUp(self):
-        super(
-            WhenPuttingOrderWithMetadataUsingOrderResource, self
-        ).setUp()
-        self.app = webtest.TestApp(app.build_wsgi_app(self.root))
-        self.app.extra_environ = get_barbican_env(self.external_project_id)
-
-        database_utils.setup_in_memory_db()
-        self.addCleanup(database_utils.in_memory_cleanup)
-
-    @property
-    def root(self):
-        self._init()
-
-        class RootController(object):
-            orders = controllers.orders.OrdersController(self.queue_resource)
-
-        return RootController()
-
-    def _init(self):
-        self.external_project_id = 'keystoneid1234'
-        self.requestor = 'requestor1234'
-
-        self.order = create_order_with_meta(
-            id_ref=utils.generate_test_uuid(tail_value=1),
-            order_type='certificate',
-            meta={'email': 'email@email.com'},
-            status="PENDING"
-        )
-
-        self.order_repo = mock.MagicMock()
-        self.order_repo.get.return_value = self.order
-        self.order_repo.save.return_value = None
-        self.order_repo.delete_entity_by_id.return_value = None
-
-        self.type = 'certificate'
-        self.meta = {'email': 'newemail@email.com'}
-
-        self.params = {'type': self.type, 'meta': self.meta}
-
-        self.setup_order_repository_mock(self.order_repo)
-        self.setup_project_repository_mock()
-
-        self.queue_resource = mock.MagicMock()
-
-    def test_should_put_order(self):
-        resp = self.app.put_json(
-            '/orders/{0}/'.format(self.order.id),
-            self.params,
-            headers={
-                'Content-Type': 'application/json'
-            }
-        )
-
-        self.assertEqual(resp.status_int, 204)
-        self.order_repo.get.assert_called_once_with(
-            entity_id=self.order.id,
-            external_project_id=self.external_project_id,
-            suppress_exception=True)
-
-    def test_should_fail_with_bogus_content(self):
-        resp = self.app.put(
-            '/orders/{0}/'.format(self.order.id),
-            'bogus',
-            headers={
-                'Content-Type': 'application/json'
-            },
-            expect_errors=True
-        )
-        self.assertEqual(resp.status_int, 400)
-
-    def test_should_fail_bad_type(self):
-        self.order['type'] = 'secret'
-        resp = self.app.put_json(
-            '/orders/{0}/'.format(self.order.id),
-            self.params,
-            headers={
-                'Content-Type': 'application/json'
-            },
-            expect_errors=True
-        )
-
-        self.assertEqual(resp.status_int, 400)
-        self.order_repo.get.assert_called_once_with(
-            entity_id=self.order.id,
-            external_project_id=self.external_project_id,
-            suppress_exception=True)
-
-    def test_should_fail_bad_status(self):
-        self.order['status'] = 'DONE'
-        resp = self.app.put_json(
-            '/orders/{0}/'.format(self.order.id),
-            self.params,
-            headers={
-                'Content-Type': 'application/json'
-            },
-            expect_errors=True
-        )
-
-        self.assertEqual(resp.status_int, 400)
-        self.order_repo.get.assert_called_once_with(
-            entity_id=self.order.id,
-            external_project_id=self.external_project_id,
-            suppress_exception=True)
-
-
-class WhenCreatingTypeOrdersUsingOrdersResource(FunctionalTest):
-
-    def setUp(self):
-        super(
-            WhenCreatingTypeOrdersUsingOrdersResource, self
-        ).setUp()
-        self.app = webtest.TestApp(app.build_wsgi_app(self.root))
-        self.app.extra_environ = get_barbican_env(self.external_project_id)
-
-        database_utils.setup_in_memory_db()
-        self.addCleanup(database_utils.in_memory_cleanup)
-
-    @property
-    def root(self):
-        self._init()
-
-        class RootController(object):
-            orders = controllers.orders.OrdersController(self.queue_resource)
-
-        return RootController()
-
-    def _init(self):
-        self.type = 'key'
-        self.meta = {'name': 'secretname',
-                     'algorithm': 'AES',
-                     'bit_length': 256,
-                     'mode': 'cbc',
-                     'payload_content_type':
-                     'application/octet-stream'}
-
-        self.key_order_req = {'type': self.type,
-                              'meta': self.meta}
-
-        self.project_internal_id = 'projectid1234'
-        self.external_project_id = 'keystoneid1234'
-
-        self.project = models.Project()
-        self.project.id = self.project_internal_id
-        self.project.external_id = self.external_project_id
-
-        self.project_repo = mock.MagicMock()
-        self.project_repo.get.return_value = self.project
-
-        self.order_repo = mock.MagicMock()
-        self.order_repo.create_from.return_value = None
-
-        self.setup_order_repository_mock(self.order_repo)
-        self.setup_project_repository_mock(self.project_repo)
-
-        self.queue_resource = mock.MagicMock()
-        self.queue_resource.process_type_order.return_value = None
-
-        self.ca_repo = mock.MagicMock()
-        self.setup_ca_repository_mock(self.ca_repo)
-
-        self.project_ca_repo = mock.MagicMock()
-        self.setup_project_ca_repository_mock(self.project_ca_repo)
-
-        self.cert_type = 'certificate'
-        self.cert_meta = {'request': 'XXXXXXX'}
-
-        self.cert_order_req = {'type': self.cert_type,
-                               'meta': self.cert_meta}
-
-        self.ca_id = "ca_id1"
-        parsed_ca = {
-            'plugin_name': 'plugin_name',
-            'plugin_ca_id': 'plugin_name ca_id1',
-            'name': 'plugin name',
-            'description': 'Master CA for default plugin',
-            'ca_signing_certificate': 'XXXXX',
-            'intermediates': 'YYYYY'
-        }
-
-        self.ca = models.CertificateAuthority(parsed_ca)
-        self.ca.id = self.ca_id
-        self.ca_repo.get.return_value = self.ca
-
-        self.ca_id2 = "ca_id2"
-        parsed_ca2 = {
-            'plugin_name': 'plugin_name',
-            'plugin_ca_id': 'plugin_name ca_id2',
-            'name': 'plugin name',
-            'description': 'Master CA for default plugin',
-            'ca_signing_certificate': 'XXXXX',
-            'intermediates': 'YYYYY'
-        }
-
-        self.ca2 = models.CertificateAuthority(parsed_ca2)
-        self.ca2.id = self.ca_id2
-
-        self.project_ca_repo.get_by_create_date.return_value = (
-            [], 0, 4, 0)
-
-        self.project_ca = models.ProjectCertificateAuthority(
-            self.project.id, self.ca_id)
-
-    def test_should_add_new_order(self):
-        resp = self.app.post_json(
-            '/orders/', self.key_order_req
-        )
-        self.assertEqual(resp.status_int, 202)
-
-        self.queue_resource.process_type_order.assert_called_once_with(
-            order_id=None, project_id=self.external_project_id)
-
-        args, kwargs = self.order_repo.create_from.call_args
-        order = args[0]
-        self.assertIsInstance(order, models.Order)
-
-    def test_should_add_new_cert_order(self):
-        resp = self.app.post_json(
-            '/orders/',
-            self.cert_order_req
-        )
-        self.assertEqual(resp.status_int, 202)
-
-        self.queue_resource.process_type_order.assert_called_once_with(
-            order_id=None, project_id=self.external_project_id)
-
-        args, kwargs = self.order_repo.create_from.call_args
-        order = args[0]
-        self.assertIsInstance(order, models.Order)
-
-    def test_should_add_new_cert_order_with_ca_id(self):
-        self.cert_meta['ca_id'] = self.ca_id
-
-        resp = self.app.post_json(
-            '/orders/',
-            self.cert_order_req
-        )
-        self.assertEqual(resp.status_int, 202)
-
-        self.queue_resource.process_type_order.assert_called_once_with(
-            order_id=None, project_id=self.external_project_id)
-
-        args, kwargs = self.order_repo.create_from.call_args
-        order = args[0]
-        self.assertIsInstance(order, models.Order)
-
-    def test_should_add_new_cert_order_with_ca_id_project_ca_defined(self):
-        self.cert_meta['ca_id'] = self.ca_id
-        self.project_ca_repo.get_by_create_date.return_value = (
-            [self.project_ca], 0, 4, 1)
-
-        resp = self.app.post_json(
-            '/orders/',
-            self.cert_order_req
-        )
-        self.assertEqual(resp.status_int, 202)
-
-        self.queue_resource.process_type_order.assert_called_once_with(
-            order_id=None, project_id=self.external_project_id)
-
-        args, kwargs = self.order_repo.create_from.call_args
-        order = args[0]
-        self.assertIsInstance(order, models.Order)
-
-    def test_should_fail_invalid_ca_id(self):
-        self.cert_meta['ca_id'] = 'bogus_ca_id'
-        self.ca_repo.get.return_value = None
-
-        resp = self.app.post_json(
-            '/orders/',
-            self.cert_order_req,
-            expect_errors=True
-        )
-        self.assertEqual(resp.status_int, 400)
-
-    def test_should_fail_ca_not_in_defined_project_ca_ids(self):
-        self.cert_meta['ca_id'] = self.ca_id2
-        self.ca_repo.get.return_value = self.ca2
-        self.project_ca_repo.get_by_create_date.return_value = (
-            [self.project_ca], 0, 4, 1)
-
-        resp = self.app.post_json(
-            '/orders/',
-            self.cert_order_req,
-            expect_errors=True
-        )
-        self.assertEqual(resp.status_int, 403)
-
-    def test_should_fail_add_new_order_no_secret_json(self):
-        resp = self.app.post_json(
-            '/orders/', {},
-            expect_errors=True
-        )
-        self.assertEqual(resp.status_int, 400)
-
-    def test_should_fail_add_new_order_bad_json(self):
-        resp = self.app.post(
-            '/orders/', '',
-            expect_errors=True
-        )
-        self.assertEqual(resp.status_int, 415)
-
-
-class WhenPerformingUnallowedOperationsOnOrders(FunctionalTest):
-
-    def setUp(self):
-        super(
-            WhenPerformingUnallowedOperationsOnOrders, self
-        ).setUp()
-        self.app = webtest.TestApp(app.build_wsgi_app(self.root))
-        self.app.extra_environ = get_barbican_env(self.external_project_id)
-
-        database_utils.setup_in_memory_db()
-        self.addCleanup(database_utils.in_memory_cleanup)
-
-    @property
-    def root(self):
-        self._init()
-
-        class RootController(object):
-            orders = controllers.orders.OrdersController(self.queue_resource)
-
-        return RootController()
-
-    def _init(self):
-        self.project_internal_id = 'projectid1234'
-        self.external_project_id = 'keystoneid1234'
-
-        self.project = models.Project()
-        self.project.id = self.project_internal_id
-        self.project.external_id = self.external_project_id
-
-        self.project_repo = mock.MagicMock()
-        self.project_repo.get.return_value = self.project
-
-        self.order_repo = mock.MagicMock()
-        self.order_repo.create_from.return_value = None
-
-        self.setup_order_repository_mock(self.order_repo)
-        self.setup_project_repository_mock(self.project_repo)
-
-        self.queue_resource = mock.MagicMock()
-
-        self.type = 'key'
-        self.meta = {"name": "secretname",
-                     "algorithm": "AES",
-                     "bit_length": 256,
-                     "mode": "cbc",
-                     'payload_content_type':
-                     'application/octet-stream'}
-
-        self.key_order_req = {'type': self.type,
-                              'meta': self.meta}
-
-    def test_should_not_allow_put_orders(self):
-        resp = self.app.put_json(
-            '/orders/',
-            self.key_order_req,
-            expect_errors=True
-        )
-        self.assertEqual(resp.status_int, 405)
-
-    def test_should_not_allow_delete_orders(self):
-        resp = self.app.delete(
-            '/orders/',
-            expect_errors=True
-        )
-        self.assertEqual(resp.status_int, 405)
-
-    def test_should_not_allow_post_order_by_id(self):
-        resp = self.app.post_json(
-            '/orders/{0}/'.format(utils.generate_test_uuid(tail_value=1)),
-            self.key_order_req,
-            headers={
-                'Content-Type': 'application/json'
-            },
-            expect_errors=True
-        )
-
-        self.assertEqual(resp.status_int, 405)
 
 
 class WhenAddingNavigationHrefs(utils.BaseTestCase):
@@ -1356,11 +785,15 @@ class WhenCreatingConsumersUsingConsumersResource(FunctionalTest):
         self.setup_project_repository_mock(self.project_repo)
 
         # Set up mocked container
-        self.container = create_container(id_ref='id1')
+        self.container = create_container(
+            id_ref='id1',
+            project_id=self.project_internal_id,
+            external_project_id=self.external_project_id)
 
         # Set up mocked container repo
         self.container_repo = mock.MagicMock()
         self.container_repo.get.return_value = self.container
+        self.container_repo.get_container_by_id.return_value = self.container
         self.setup_container_repository_mock(self.container_repo)
 
         # Set up secret repo
@@ -1449,7 +882,10 @@ class WhenGettingOrDeletingConsumersUsingConsumerResource(FunctionalTest):
         self.setup_project_repository_mock(self.project_repo)
 
         # Set up mocked container
-        self.container = create_container(id_ref='id1')
+        self.container = create_container(
+            id_ref='id1',
+            project_id=self.project_internal_id,
+            external_project_id=self.external_project_id)
 
         # Set up mocked consumers
         self.consumer = create_consumer(self.container.id, id_ref='id2')
@@ -1463,6 +899,7 @@ class WhenGettingOrDeletingConsumersUsingConsumerResource(FunctionalTest):
         # Set up mocked container repo
         self.container_repo = mock.MagicMock()
         self.container_repo.get.return_value = self.container
+        self.container_repo.get_container_by_id.return_value = self.container
         self.setup_container_repository_mock(self.container_repo)
 
         # Set up mocked container consumer repo
@@ -1650,7 +1087,10 @@ class WhenPerformingUnallowedOperationsOnConsumers(FunctionalTest):
         self.setup_project_repository_mock(self.project_repo)
 
         # Set up mocked container
-        self.container = create_container(id_ref='id1')
+        self.container = create_container(
+            id_ref='id1',
+            project_id=self.project_internal_id,
+            external_project_id=self.external_project_id)
 
         # Set up mocked container consumers
         self.consumer = create_consumer(self.container.id, id_ref='id2')

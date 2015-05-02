@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import datetime
 import unittest
 
@@ -44,7 +45,7 @@ def get_private_key_req():
             'algorithm': 'rsa',
             'bit_length': 1024,
             'secret_type': 'private',
-            'payload': utils.get_private_key()}
+            'payload': base64.b64encode(utils.get_private_key())}
 
 
 def get_public_key_req():
@@ -54,7 +55,7 @@ def get_public_key_req():
             'algorithm': 'rsa',
             'bit_length': 1024,
             'secret_type': 'public',
-            'payload': utils.get_public_key()}
+            'payload': base64.b64encode(utils.get_public_key())}
 
 
 def get_certificate_req():
@@ -64,7 +65,7 @@ def get_certificate_req():
             'algorithm': 'rsa',
             'bit_length': 1024,
             'secret_type': 'certificate',
-            'payload': utils.get_certificate()}
+            'payload': base64.b64encode(utils.get_certificate())}
 
 
 def get_passphrase_req():
@@ -927,6 +928,18 @@ class WhenTestingConsumerValidator(utils.BaseTestCase):
     def test_should_validate_all_fields(self):
         self.validator.validate(self.consumer_req)
 
+    def test_name_too_long_should_raise_with_invalid_object(self):
+        # Negative test to make sure our maxLength parameter for the
+        # name field raises the proper exception when a value greater
+        # than 255 in this case is passed in.
+        longname = 'a' * 256
+        consumer_req = {'name': longname, 'url': self.URL}
+        self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            consumer_req
+        )
+
 
 class WhenTestingKeyTypeOrderValidator(utils.BaseTestCase):
 
@@ -936,9 +949,7 @@ class WhenTestingKeyTypeOrderValidator(utils.BaseTestCase):
         self.meta = {"name": "secretname",
                      "algorithm": "AES",
                      "bit_length": 256,
-                     "mode": "cbc",
-                     'payload_content_type':
-                     'application/octet-stream'}
+                     "mode": "cbc"}
 
         self.key_order_req = {'type': self.type,
                               'meta': self.meta}
@@ -1017,6 +1028,12 @@ class WhenTestingKeyTypeOrderValidator(utils.BaseTestCase):
         self.assertTrue(result is not None)
         self.assertTrue(result['meta']['algorithm'] == 'hmacsha1')
 
+    def test_should_raise_with_payload_in_order(self):
+        self.key_order_req['meta']['payload'] = 'payload'
+        self.assertRaises(excep.InvalidObject,
+                          self.validator.validate,
+                          self.key_order_req)
+
 
 class WhenTestingAsymmetricTypeOrderValidator(utils.BaseTestCase):
 
@@ -1025,9 +1042,7 @@ class WhenTestingAsymmetricTypeOrderValidator(utils.BaseTestCase):
         self.type = 'asymmetric'
         self.meta = {"name": "secretname",
                      "algorithm": "RSA",
-                     "bit_length": 256,
-                     'payload_content_type':
-                     'application/octet-stream'}
+                     "bit_length": 256}
 
         self.asymmetric_order_req = {'type': self.type,
                                      'meta': self.meta}
@@ -1045,12 +1060,9 @@ class WhenTestingAsymmetricTypeOrderValidator(utils.BaseTestCase):
                           self.validator.validate,
                           self.asymmetric_order_req)
 
-    def test_should_raise_with_wrong_payload_content_type_in_order_refs(self):
-        # NOTE(jaosorior): this is actually a valid content type, but it is not
-        # supported by asymmetric key orders.
-        self.asymmetric_order_req['meta']['payload_content_type'] = (
-            'text/plain')
-        self.assertRaises(excep.UnsupportedField,
+    def test_should_raise_with_payload_in_order(self):
+        self.asymmetric_order_req['meta']['payload'] = 'payload'
+        self.assertRaises(excep.InvalidObject,
                           self.validator.validate,
                           self.asymmetric_order_req)
 
@@ -1069,7 +1081,7 @@ class WhenTestingSimpleCMCOrderValidator(utils.BaseTestCase):
         super(WhenTestingSimpleCMCOrderValidator, self).setUp()
         self.type = 'certificate'
         self.meta = {'request_type': 'simple-cmc',
-                     'request_data': certs.create_good_csr(),
+                     'request_data': base64.b64encode(certs.create_good_csr()),
                      'requestor_name': 'Barbican User',
                      'requestor_email': 'barbican_user@example.com',
                      'requestor_phone': '555-1212'}
@@ -1103,24 +1115,39 @@ class WhenTestingSimpleCMCOrderValidator(utils.BaseTestCase):
                           self.validator.validate,
                           self.order_req)
 
-    def test_should_raise_with_bad_pkcs10_data(self):
+    def test_should_raise_with_pkcs10_data_with_bad_base64(self):
         self.meta['request_data'] = certs.create_bad_csr()
+        self._set_order()
+        self.assertRaises(excep.PayloadDecodingError,
+                          self.validator.validate,
+                          self.order_req)
+
+    def test_should_raise_with_bad_pkcs10_data(self):
+        self.meta['request_data'] = base64.b64encode(certs.create_bad_csr())
         self._set_order()
         self.assertRaises(excep.InvalidPKCS10Data,
                           self.validator.validate,
                           self.order_req)
 
     def test_should_raise_with_signed_wrong_key_pkcs10_data(self):
-        self.meta['request_data'] = certs.create_csr_signed_with_wrong_key()
+        self.meta['request_data'] = base64.b64encode(
+            certs.create_csr_signed_with_wrong_key())
         self._set_order()
         self.assertRaises(excep.InvalidPKCS10Data,
                           self.validator.validate,
                           self.order_req)
 
     def test_should_raise_with_unsigned_pkcs10_data(self):
-        self.meta['request_data'] = certs.create_csr_that_has_not_been_signed()
+        self.meta['request_data'] = base64.b64encode(
+            certs.create_csr_that_has_not_been_signed())
         self._set_order()
         self.assertRaises(excep.InvalidPKCS10Data,
+                          self.validator.validate,
+                          self.order_req)
+
+    def test_should_raise_with_payload_in_order(self):
+        self.meta['payload'] = 'payload'
+        self.assertRaises(excep.InvalidObject,
                           self.validator.validate,
                           self.order_req)
 
@@ -1142,9 +1169,16 @@ class WhenTestingFullCMCOrderValidator(utils.BaseTestCase):
         self.order_req = {'type': self.type,
                           'meta': self.meta}
 
+    def test_should_raise_not_yet_implemented(self):
+        self.assertRaises(excep.FullCMCNotSupported,
+                          self.validator.validate,
+                          self.order_req)
+
+    @testtools.skip("Feature not yet implemented")
     def test_should_pass_good_data(self):
         self.validator.validate(self.order_req)
 
+    @testtools.skip("Feature not yet implemented")
     def test_should_raise_with_no_request_data(self):
         del self.meta['request_data']
         self._set_order()
@@ -1195,9 +1229,9 @@ class WhenTestingStoredKeyOrderValidator(utils.BaseTestCase):
         super(WhenTestingStoredKeyOrderValidator, self).setUp()
         self.type = 'certificate'
         self.meta = {'request_type': 'stored-key',
-                     'container_ref': 'good_container_ref',
+                     'container_ref':
+                         'https://localhost/v1/containers/good_container_ref',
                      'subject_dn': 'cn=barbican-server,o=example.com',
-                     'extensions': VALID_EXTENSIONS,
                      'requestor_name': 'Barbican User',
                      'requestor_email': 'barbican_user@example.com',
                      'requestor_phone': '555-1212'}
@@ -1231,9 +1265,11 @@ class WhenTestingStoredKeyOrderValidator(utils.BaseTestCase):
                           self.validator.validate,
                           self.order_req)
 
-    def test_should_pass_with_no_extensions_data(self):
-        del self.meta['extensions']
-        self.validator.validate(self.order_req)
+    def test_should_raise_with_extensions_data(self):
+        self.meta['extensions'] = VALID_EXTENSIONS
+        self.assertRaises(excep.CertificateExtensionsNotSupported,
+                          self.validator.validate,
+                          self.order_req)
 
     @testtools.skip("Not yet implemented")
     def test_should_raise_with_bad_extensions_data(self):
@@ -1256,45 +1292,9 @@ class WhenTestingStoredKeyOrderValidator(utils.BaseTestCase):
                           self.validator.validate,
                           self.order_req)
 
-    @testtools.skip("Not yet implemented")
-    def test_should_raise_with_missing_container(self):
-        self.meta['container_ref'] = 'missing_container_ref'
-        self.assertRaises(excep.InvalidContainer,
-                          self.validator.validate,
-                          self.order_req)
-
-    @testtools.skip("Not yet implemented")
-    def test_should_raise_with_container_not_cert_type(self):
-        self.meta['container_ref'] = 'bad_type_container_ref'
-        self.assertRaises(excep.InvalidContainer,
-                          self.validator.validate,
-                          self.order_req)
-
-    @testtools.skip("Not yet implemented")
-    def test_should_raise_with_inaccessible_container(self):
-        self.meta['container_ref'] = 'inaccessible_container_ref'
-        self.assertRaises(excep.InvalidContainer,
-                          self.validator.validate,
-                          self.order_req)
-
-    @testtools.skip("Not yet implemented")
-    def test_should_raise_with_missing_public_key(self):
-        self.meta['container_ref'] = 'missing_public_key_ref'
-        self.assertRaises(excep.InvalidContainer,
-                          self.validator.validate,
-                          self.order_req)
-
-    @testtools.skip("Not yet implemented")
-    def test_should_raise_with_inaccessible_public_key(self):
-        self.meta['container_ref'] = 'inaccessible_public_key_ref'
-        self.assertRaises(excep.InvalidContainer,
-                          self.validator.validate,
-                          self.order_req)
-
-    @testtools.skip("Not yet implemented")
-    def test_should_raise_with_missing_private_key(self):
-        self.meta['container_ref'] = 'missing_private_key_ref'
-        self.assertRaises(excep.InvalidContainer,
+    def test_should_raise_with_payload_in_order(self):
+        self.meta['payload'] = 'payload'
+        self.assertRaises(excep.InvalidObject,
                           self.validator.validate,
                           self.order_req)
 

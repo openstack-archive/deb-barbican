@@ -16,9 +16,8 @@
 """
 Common utilities for Barbican.
 """
-
+import collections
 import mimetypes
-import time
 import uuid
 
 from oslo_config import cfg
@@ -90,13 +89,15 @@ def get_accepted_encodings_direct(content_encoding_header):
     if content_encoding_header is None:
         return None
 
+    Encoding = collections.namedtuple('Encoding', ['coding', 'quality'])
+
     encodings = list()
     for enc in content_encoding_header.split(','):
         if ';' in enc:
-            encoding, q = enc.split(';')
+            coding, qvalue = enc.split(';')
             try:
-                q = q.split('=')[1]
-                quality = float(q.strip())
+                qvalue = qvalue.split('=')[1]
+                quality = float(qvalue.strip())
             except ValueError:
                 # can't convert quality to float
                 return None
@@ -104,12 +105,14 @@ def get_accepted_encodings_direct(content_encoding_header):
                 # quality is outside valid range
                 return None
             if quality > 0.0:
-                encodings.append((encoding.strip(), quality))
+                encodings.append(Encoding(coding.strip(), quality))
         else:
-            encodings.append((enc.strip(), 1))
+            encodings.append(Encoding(enc.strip(), 1))
 
-    return [enc[0] for enc in sorted(encodings,
-                                     cmp=lambda a, b: cmp(b[1], a[1]))]
+    # Sort the encodings by quality
+    encodings = sorted(encodings, key=lambda e: e.quality, reverse=True)
+
+    return [encoding.coding for encoding in encodings]
 
 
 def generate_fullname_for(instance):
@@ -129,44 +132,6 @@ def generate_fullname_for(instance):
     if module is None or module == "__builtin__":
         return class_name
     return "{module}.{class_name}".format(module=module, class_name=class_name)
-
-
-class TimeKeeper(object):
-    """TimeKeeper object
-
-    Keeps track of elapsed times and then allows for dumping a summary to
-    logs. This class can be used to profile a method as a fine grain level.
-    """
-
-    def __init__(self, name, logger=None):
-        self.logger = logger or getLogger(__name__)
-        self.name = name
-        self.time_start = time.time()
-        self.time_last = self.time_start
-        self.elapsed = []
-
-    def mark(self, note=None):
-        """Mark a moment in time, with an optional note
-
-        :param note: Optional note about what is occurring at this time
-        """
-        time_curr = time.time()
-        self.elapsed.append((time_curr, time_curr - self.time_last, note))
-        self.time_last = time_curr
-
-    def dump(self):
-        """Dump the elapsed time(s) to log."""
-        self.logger.debug("Timing output for '{0}'".format(self.name))
-        for timec, timed, note in self.elapsed:
-            self.logger.debug("    time current/elapsed/notes:"
-                              "{0:.3f}/{1:.0f}/{2}".format(timec,
-                                                           timed * 1000.,
-                                                           note))
-        time_current = time.time()
-        total_elapsed = time_current - self.time_start
-        self.logger.debug("    Final time/elapsed:"
-                          "{0:.3f}/{1:.0f}".format(time_current,
-                                                   total_elapsed * 1000.))
 
 
 def generate_uuid():

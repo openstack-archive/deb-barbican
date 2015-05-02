@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2014 Rackspace, Inc.
+# Copyright (c) 2013-2015 Rackspace, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,37 +27,10 @@ from barbican.model import models
 from barbican.model import repositories as rep
 from barbican.plugin import resources as plugin
 from barbican.tasks import certificate_resources as cert
+from barbican.tasks import common
 
 
 LOG = utils.getLogger(__name__)
-
-
-RETRY_MSEC = 60 * 1000
-
-
-class FollowOnProcessingStatusDTO(object):
-    """Follow On Processing status data transfer object (DTO).
-
-    An object of this type is optionally returned by the
-    BaseTask.handle_processing() method defined below, and is used to guide
-    follow on processing and to provide status feedback to clients.
-    """
-    def __init__(self, status=u._('Unknown'), status_message=u._('Unknown'),
-                 retry_method=None, retry_msec=RETRY_MSEC):
-        """Creates a new FollowOnProcessingStatusDTO.
-
-        :param status: Status for cert order
-        :param status_message: Message to explain status type.
-        :param retry_method: Method to retry
-        :param retry_msec: Number of milliseconds to wait for retry
-        """
-        self.status = status
-        self.status_message = status_message
-        self.retry_method = retry_method
-        self.retry_msec = int(retry_msec)
-
-    def is_follow_on_needed(self):
-        return self.retry_method
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -73,6 +46,25 @@ class BaseTask(object):
             u._('Create Secret')
         """
 
+    def process_and_suppress_exceptions(self, *args, **kwargs):
+        """Invokes the process() template method, suppressing all exceptions.
+
+        TODO(john-wood-w) This method suppresses exceptions for flows that
+        do not want to rollback database modifications in reaction to such
+        exceptions, as this could also rollback the marking of the entity
+        (eg. order) in the ERROR status via the handle_error() call below.
+        For Liberty, we might want to consider a workflow manager instead of
+        these process_xxxx() method as shown here:
+        https://gist.github.com/jfwood/a8130265b0db3c793ec8
+        """
+        try:
+            self.process(*args, **kwargs)
+        except Exception:
+            LOG.exception(
+                u._LE(
+                    "Suppressing exception while trying to "
+                    "process task '%s'."), self.get_name())
+
     def process(self, *args, **kwargs):
         """A template method for all asynchronous tasks.
 
@@ -81,9 +73,13 @@ class BaseTask(object):
 
         :param args: List of arguments passed in from the client.
         :param kwargs: Dict of arguments passed in from the client.
-        :return: None
+        :return: Returns :class:`FollowOnProcessingStatusDTO` if follow-on
+                 processing (such as retrying this or another task) is
+                 required, otherwise a None return indicates that no
+                 follow-on processing is required.
         """
         name = self.get_name()
+        result = None
 
         # Retrieve the target entity (such as an models.Order instance).
         try:
@@ -120,6 +116,8 @@ class BaseTask(object):
             LOG.exception(u._LE("Could not process after successfully "
                                 "executing task '%s'."), name)
             raise e
+
+        return result
 
     @abc.abstractmethod
     def retrieve_entity(self, *args, **kwargs):
@@ -216,6 +214,8 @@ class _OrderTaskHelper(object):
 
         if not is_follow_on_needed:
             order.status = models.States.ACTIVE
+        else:
+            order.status = models.States.PENDING
 
         if sub_status:
             order.set_sub_status_safely(sub_status)
@@ -233,6 +233,7 @@ class BeginTypeOrder(BaseTask):
         return u._('Process TypeOrder')
 
     def __init__(self):
+        super(BeginTypeOrder, self).__init__()
         LOG.debug('Creating BeginTypeOrder task processor')
         self.project_repo = rep.get_project_repository()
         self.helper = _OrderTaskHelper()
@@ -241,7 +242,7 @@ class BeginTypeOrder(BaseTask):
         return self.helper.retrieve_entity(*args, **kwargs)
 
     def handle_processing(self, order, *args, **kwargs):
-        self.handle_order(order)
+        return self.handle_order(order)
 
     def handle_order(self, order):
         """Handle secret creation using meta info.
@@ -254,10 +255,17 @@ class BeginTypeOrder(BaseTask):
         if type is certificate
             TBD
         :param order: Order to process.
+        :return: None if no follow on processing is needed for this task,
+                 otherwise a :class:`FollowOnProcessingStatusDTO` instance
+                 with information on how to process this task into the future.
         """
+        result_follow_on = common.FollowOnProcessingStatusDTO()
+
         order_info = order.to_dict_fields()
         order_type = order_info.get('type')
         meta_info = order_info.get('meta')
+        if order_info.get('creator_id'):
+            meta_info.setdefault('creator_id', order_info.get('creator_id'))
 
         # Retrieve the project.
         project = self.project_repo.get(order.project_id)
@@ -283,7 +291,8 @@ class BeginTypeOrder(BaseTask):
             LOG.debug("...done creating asymmetric order's secret.")
         elif order_type == models.OrderType.CERTIFICATE:
             # Request a certificate
-            new_container = cert.issue_certificate_request(order, project)
+            new_container = cert.issue_certificate_request(
+                order, project, result_follow_on)
             if new_container:
                 order.container_id = new_container.id
             LOG.debug("...done requesting a certificate.")
@@ -291,6 +300,8 @@ class BeginTypeOrder(BaseTask):
             raise NotImplementedError(
                 u._('Order type "{order_type}" not implemented.').format(
                     order_type=order_type))
+
+        return result_follow_on
 
     def handle_error(self, order, status, message, exception,
                      *args, **kwargs):
@@ -308,6 +319,7 @@ class UpdateOrder(BaseTask):
         return u._('Update Order')
 
     def __init__(self):
+        super(UpdateOrder, self).__init__()
         LOG.debug('Creating UpdateOrder task processor')
         self.helper = _OrderTaskHelper()
 
@@ -337,6 +349,63 @@ class UpdateOrder(BaseTask):
                     order_type=order_type))
 
         LOG.debug("...done updating order.")
+
+    def handle_error(self, order, status, message, exception,
+                     *args, **kwargs):
+        self.helper.handle_error(
+            order, status, message, exception, *args, **kwargs)
+
+    def handle_success(self, order, result, *args, **kwargs):
+        self.helper.handle_success(
+            order, result, *args, **kwargs)
+
+
+class CheckCertificateStatusOrder(BaseTask):
+    """Handles checking the status of a certificate order."""
+
+    def get_name(self):
+        return u._('Check Certificate Order Status')
+
+    def __init__(self):
+        LOG.debug('Creating CheckCertificateStatusOrder task processor')
+        self.project_repo = rep.get_project_repository()
+        self.helper = _OrderTaskHelper()
+
+    def retrieve_entity(self, *args, **kwargs):
+        return self.helper.retrieve_entity(*args, **kwargs)
+
+    def handle_processing(self, order, *args, **kwargs):
+        return self.handle_order(order)
+
+    def handle_order(self, order):
+        """Handle checking the status of a certificate order.
+
+        :param order: Order to process.
+        :return: None if no follow on processing is needed for this task,
+                 otherwise a :class:`FollowOnProcessingStatusDTO` instance
+                 with information on how to process this task into the future.
+        """
+        result_follow_on = common.FollowOnProcessingStatusDTO()
+
+        order_info = order.to_dict_fields()
+        order_type = order_info.get('type')
+
+        # Retrieve the project.
+        project = self.project_repo.get(order.project_id)
+
+        if order_type != models.OrderType.CERTIFICATE:
+            raise NotImplementedError(
+                u._('Order type "{order_type}" not supported.').format(
+                    order_type=order_type))
+
+        # Request a certificate
+        new_container = cert.check_certificate_request(
+            order, project, result_follow_on)
+        if new_container:
+            order.container_id = new_container.id
+        LOG.debug("...done checking status of a certificate order.")
+
+        return result_follow_on
 
     def handle_error(self, order, status, message, exception,
                      *args, **kwargs):

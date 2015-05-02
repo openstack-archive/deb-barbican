@@ -16,12 +16,14 @@ import pecan
 
 from barbican import api
 from barbican.api import controllers
+from barbican.api.controllers import acls
 from barbican.common import exception
 from barbican.common import hrefs
 from barbican.common import resources as res
 from barbican.common import utils
 from barbican.common import validators
 from barbican import i18n as u
+from barbican.model import models
 from barbican.model import repositories as repo
 from barbican.plugin import resources as plugin
 from barbican.plugin import util as putil
@@ -52,13 +54,26 @@ def _request_has_twsk_but_no_transport_key_id():
                          'transport key id has not been provided.'))
 
 
-class SecretController(object):
+class SecretController(controllers.ACLMixin):
     """Handles Secret retrieval and deletion requests."""
 
     def __init__(self, secret):
         LOG.debug('=== Creating SecretController ===')
         self.secret = secret
         self.transport_key_repo = repo.get_transport_key_repository()
+
+    def get_acl_tuple(self, req, **kwargs):
+        d = self.get_acl_dict_for_user(req, self.secret.secret_acls)
+        d['project_id'] = self.secret.project_assocs[0].projects.external_id
+        d['creator_id'] = self.secret.creator_id
+        return 'secret', d
+
+    @pecan.expose()
+    def _lookup(self, sub_resource, *remainder):
+        if sub_resource == 'acls':
+            return acls.SecretACLsController(self.secret), remainder
+        else:
+            pecan.abort(405)  # only 'acl' as sub-resource is supported
 
     @pecan.expose(generic=True)
     def index(self, **kwargs):
@@ -70,7 +85,11 @@ class SecretController(object):
     @controllers.enforce_rbac('secret:get')
     def on_get(self, external_project_id, **kwargs):
         if controllers.is_json_request_accept(pecan.request):
-            return self._on_get_secret_metadata(self.secret, **kwargs)
+            resp = self._on_get_secret_metadata(self.secret, **kwargs)
+
+            LOG.info(u._LI('Retrieved secret metadata for project: %s'),
+                     external_project_id)
+            return resp
         else:
             LOG.warning('Decrypted secret %s requested using deprecated '
                         'API call.', self.secret.id)
@@ -100,6 +119,12 @@ class SecretController(object):
 
     def _on_get_secret_payload(self, secret, external_project_id, **kwargs):
         """GET actual payload containing the secret."""
+
+        # With ACL support, the user token project does not have to be same as
+        # project associated with secret. The lookup project_id needs to be
+        # derived from the secret's data considering authorization is already
+        # done.
+        external_project_id = secret.project_assocs[0].projects.external_id
         project = res.get_or_create_project(external_project_id)
 
         pecan.override_template('', pecan.request.accept.header_value)
@@ -134,9 +159,15 @@ class SecretController(object):
     def payload(self, external_project_id, **kwargs):
         if pecan.request.method != 'GET':
             pecan.abort(405)
-        return self._on_get_secret_payload(self.secret,
-                                           external_project_id,
-                                           **kwargs)
+        resp = self._on_get_secret_payload(
+            self.secret,
+            external_project_id,
+            **kwargs
+        )
+
+        LOG.info(u._LI('Retrieved secret payload for project: %s'),
+                 external_project_id)
+        return resp
 
     @index.when(method='PUT')
     @utils.allow_all_content_types
@@ -145,7 +176,6 @@ class SecretController(object):
     @controllers.enforce_content_types(['application/octet-stream',
                                        'text/plain'])
     def on_put(self, external_project_id, **kwargs):
-
         if (not pecan.request.content_type or
                 pecan.request.content_type == 'application/json'):
             pecan.abort(
@@ -162,17 +192,21 @@ class SecretController(object):
         if validators.secret_too_big(payload):
             raise exception.LimitExceeded()
 
-        if self.secret.encrypted_data:
+        if self.secret.encrypted_data or self.secret.secret_store_metadata:
             _secret_already_has_data()
 
         project_model = res.get_or_create_project(external_project_id)
         content_type = pecan.request.content_type
         content_encoding = pecan.request.headers.get('Content-Encoding')
 
-        plugin.store_secret(payload, content_type,
-                            content_encoding, self.secret.to_dict_fields(),
-                            self.secret, project_model,
-                            transport_key_id=transport_key_id)
+        plugin.store_secret(
+            unencrypted_raw=payload,
+            content_type_raw=content_type,
+            content_encoding=content_encoding,
+            secret_model=self.secret,
+            project_model=project_model,
+            transport_key_id=transport_key_id)
+        LOG.info(u._LI('Updated secret for project: %s'), external_project_id)
 
     @index.when(method='DELETE')
     @utils.allow_all_content_types
@@ -180,9 +214,10 @@ class SecretController(object):
     @controllers.enforce_rbac('secret:delete')
     def on_delete(self, external_project_id, **kwargs):
         plugin.delete_secret(self.secret, external_project_id)
+        LOG.info(u._LI('Deleted secret for project: %s'), external_project_id)
 
 
-class SecretsController(object):
+class SecretsController(controllers.ACLMixin):
     """Handles Secret creation requests."""
 
     def __init__(self):
@@ -197,12 +232,9 @@ class SecretsController(object):
         # check, the execution only gets here if authentication of the user was
         # previously successful.
         controllers.assert_is_valid_uuid_from_uri(secret_id)
-        ctx = controllers._get_barbican_context(pecan.request)
 
-        secret = self.secret_repo.get(
-            entity_id=secret_id,
-            external_project_id=ctx.project,
-            suppress_exception=True)
+        secret = self.secret_repo.get_secret_by_id(
+            entity_id=secret_id, suppress_exception=True)
         if not secret:
             _secret_not_found()
 
@@ -261,6 +293,8 @@ class SecretsController(object):
             )
             secrets_resp_overall.update({'total': total})
 
+        LOG.info(u._LI('Retrieved secret list for project: %s'),
+                 external_project_id)
         return secrets_resp_overall
 
     @index.when(method='POST', template='json')
@@ -275,13 +309,19 @@ class SecretsController(object):
 
         transport_key_needed = data.get('transport_key_needed',
                                         'false').lower() == 'true'
+        ctxt = controllers._get_barbican_context(pecan.request)
+        if ctxt:  # in authenticated pipleline case, always use auth token user
+            data['creator_id'] = ctxt.user
+
+        secret_model = models.Secret(data)
 
         new_secret, transport_key_model = plugin.store_secret(
-            data.get('payload'),
-            data.get('payload_content_type',
-                     'application/octet-stream'),
-            data.get('payload_content_encoding'),
-            data, None, project,
+            unencrypted_raw=data.get('payload'),
+            content_type_raw=data.get('payload_content_type',
+                                      'application/octet-stream'),
+            content_encoding=data.get('payload_content_encoding'),
+            secret_model=secret_model,
+            project_model=project,
             transport_key_needed=transport_key_needed,
             transport_key_id=data.get('transport_key_id'))
 
@@ -291,6 +331,8 @@ class SecretsController(object):
         pecan.response.status = 201
         pecan.response.headers['Location'] = url
 
+        LOG.info(u._LI('Created a secret for project: %s'),
+                 external_project_id)
         if transport_key_model is not None:
             tkey_url = hrefs.convert_transport_key_to_href(
                 transport_key_model.id)

@@ -19,6 +19,7 @@ import stat
 import mock
 
 from barbican.plugin.interface import secret_store
+from barbican.tests import keys
 from barbican.tests import utils
 
 from kmip.core import attributes as attr
@@ -33,7 +34,6 @@ from kmip.services import results
 from oslo_config import cfg
 
 from barbican.plugin import kmip_secret_store as kss
-from barbican.plugin.util import translations
 
 
 def get_sample_symmetric_key():
@@ -52,8 +52,7 @@ def get_sample_symmetric_key():
 
 
 def get_sample_public_key():
-    key_material = objects.KeyMaterial(base64.b64decode(
-        translations.get_pem_components(utils.get_public_key())[1]))
+    key_material = objects.KeyMaterial(keys.get_public_key_der())
     key_value = objects.KeyValue(key_material)
     key_block = objects.KeyBlock(
         key_format_type=misc.KeyFormatType(enums.KeyFormatType.X_509),
@@ -61,14 +60,13 @@ def get_sample_public_key():
         key_value=key_value,
         cryptographic_algorithm=attr.CryptographicAlgorithm(
             enums.CryptographicAlgorithm.RSA),
-        cryptographic_length=attr.CryptographicLength(1024),
+        cryptographic_length=attr.CryptographicLength(2048),
         key_wrapping_data=None)
     return secrets.PublicKey(key_block)
 
 
 def get_sample_private_key():
-    key_material = objects.KeyMaterial(base64.b64decode(
-        translations.get_pem_components(utils.get_private_key())[1]))
+    key_material = objects.KeyMaterial(keys.get_private_key_der())
     key_value = objects.KeyValue(key_material)
     key_block = objects.KeyBlock(
         key_format_type=misc.KeyFormatType(enums.KeyFormatType.PKCS_8),
@@ -76,7 +74,7 @@ def get_sample_private_key():
         key_value=key_value,
         cryptographic_algorithm=attr.CryptographicAlgorithm(
             enums.CryptographicAlgorithm.RSA),
-        cryptographic_length=attr.CryptographicLength(1024),
+        cryptographic_length=attr.CryptographicLength(2048),
         key_wrapping_data=None)
     return secrets.PrivateKey(key_block)
 
@@ -351,8 +349,9 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
     def test_store_symmetric_secret_assert_called(self):
         key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.AES,
                                         128, 'mode')
+        sym_key = utils.get_symmetric_key()
         secret_dto = secret_store.SecretDTO(secret_store.SecretType.SYMMETRIC,
-                                            "AAAA",
+                                            sym_key,
                                             key_spec,
                                             'content_type',
                                             transport_key=None)
@@ -362,12 +361,24 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
             template_attribute=mock.ANY,
             secret=mock.ANY,
             credential=self.credential)
+        _, register_call_kwargs = self.secret_store.client.register.call_args
+        actual_secret = register_call_kwargs.get('secret')
+        self.assertEqual(
+            128,
+            actual_secret.key_block.cryptographic_length.value)
+        self.assertEqual(
+            attr.CryptographicAlgorithm(enums.CryptographicAlgorithm.AES),
+            actual_secret.key_block.cryptographic_algorithm)
+        self.assertEqual(
+            base64.b64decode(sym_key),
+            actual_secret.key_block.key_value.key_material.value)
 
     def test_store_symmetric_secret_return_value(self):
         key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.AES,
                                         128, 'mode')
+        sym_key = utils.get_symmetric_key()
         secret_dto = secret_store.SecretDTO(secret_store.SecretType.SYMMETRIC,
-                                            "AAAA",
+                                            sym_key,
                                             key_spec,
                                             'content_type',
                                             transport_key=None)
@@ -377,9 +388,10 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
         self.assertEqual(0, cmp(expected, return_value))
 
     def test_store_private_key_secret_assert_called(self):
-        key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 1024)
+        key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 2048)
         secret_dto = secret_store.SecretDTO(secret_store.SecretType.PRIVATE,
-                                            utils.get_private_key(),
+                                            base64.b64encode(
+                                                keys.get_private_key_pem()),
                                             key_spec,
                                             'content_type')
         self.secret_store.store_secret(secret_dto)
@@ -388,11 +400,23 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
             template_attribute=mock.ANY,
             secret=mock.ANY,
             credential=self.credential)
+        _, register_call_kwargs = self.secret_store.client.register.call_args
+        actual_secret = register_call_kwargs.get('secret')
+        self.assertEqual(
+            2048,
+            actual_secret.key_block.cryptographic_length.value)
+        self.assertEqual(
+            attr.CryptographicAlgorithm(enums.CryptographicAlgorithm.RSA),
+            actual_secret.key_block.cryptographic_algorithm)
+        self.assertEqual(
+            keys.get_private_key_der(),
+            actual_secret.key_block.key_value.key_material.value)
 
     def test_store_private_key_secret_return_value(self):
-        key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 1024)
+        key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 2048)
         secret_dto = secret_store.SecretDTO(secret_store.SecretType.PRIVATE,
-                                            utils.get_private_key(),
+                                            base64.b64encode(
+                                                keys.get_private_key_pem()),
                                             key_spec,
                                             'content_type')
         return_value = self.secret_store.store_secret(secret_dto)
@@ -483,11 +507,11 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
         'public_key': [get_sample_public_key(),
                        secret_store.SecretType.PUBLIC,
                        misc.KeyFormatType(enums.KeyFormatType.X_509),
-                       utils.get_public_key()],
+                       base64.b64encode(keys.get_public_key_pem())],
         'private_key': [get_sample_private_key(),
                         secret_store.SecretType.PRIVATE,
                         misc.KeyFormatType(enums.KeyFormatType.PKCS_8),
-                        utils.get_private_key()],
+                        base64.b64encode(keys.get_private_key_pem())],
         'opaque': [get_sample_symmetric_key(),
                    secret_store.SecretType.OPAQUE,
                    None,
@@ -512,9 +536,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
 
         self.assertEqual(secret_store.SecretDTO, type(secret_dto))
         self.assertEqual(secret_type, secret_dto.type)
-        self.assertEqual(
-            expected_secret,
-            secret_dto.secret)
+        self.assertEqual(expected_secret, secret_dto.secret)
 
     def test_get_secret_symmetric_return_value_invalid_key_material_type(self):
         sample_secret = self.sample_secret

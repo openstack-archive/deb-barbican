@@ -9,6 +9,7 @@ Quick Start
    :maxdepth: 1
 
    ./quickstart/secrets
+   ./quickstart/containers
 
 
 API Reference
@@ -18,4 +19,4 @@ API Reference
     :maxdepth: 1
 
     ./reference/secrets
-
+    ./reference/containers

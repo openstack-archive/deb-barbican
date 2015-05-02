@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
+import copy
 import os
 import uuid
 
@@ -49,21 +51,30 @@ dogtag_plugin_opts = [
                default="8443",
                help=u._('Port for the Dogtag instance')),
     cfg.StrOpt('nss_db_path',
-               help=u._('Path to the NSS certificate database')),
+               help=u._('Path to the NSS certificate database for the KRA')),
+    cfg.StrOpt('nss_db_path_ca',
+               help=u._('Path to the NSS certificate database for the CA')),
     cfg.StrOpt('nss_password',
-               help=u._('Password for NSS certificate database')),
+               help=u._('Password for the NSS certificate databases')),
     cfg.StrOpt('simple_cmc_profile',
-               help=u._('Profile for simple CMC requests'))
+               help=u._('Profile for simple CMC requests')),
+    cfg.StrOpt('auto_approved_profiles',
+               default="caServerCert",
+               help=u._('List of automatically approved enrollment profiles'))
 ]
 
 CONF.register_group(dogtag_plugin_group)
 CONF.register_opts(dogtag_plugin_opts, group=dogtag_plugin_group)
 
 
-def setup_nss_db(conf):
+def setup_nss_db(conf, subsystem):
     crypto = None
     create_nss_db = False
-    nss_db_path = conf.dogtag_plugin.nss_db_path
+    if subsystem == 'ca':
+        nss_db_path = conf.dogtag_plugin.nss_db_path_ca
+    else:
+        nss_db_path = conf.dogtag_plugin.nss_db_path
+
     if nss_db_path is not None:
         nss_password = conf.dogtag_plugin.nss_password
         if nss_password is None:
@@ -116,6 +127,7 @@ class DogtagKRAPlugin(sstore.SecretStoreBase):
     # metadata constants
     ALG = "alg"
     BIT_LENGTH = "bit_length"
+    GENERATED = "generated"
     KEY_ID = "key_id"
     SECRET_MODE = "secret_mode"
     PASSPHRASE_KEY_ID = "passphrase_key_id"
@@ -130,7 +142,7 @@ class DogtagKRAPlugin(sstore.SecretStoreBase):
     def __init__(self, conf=CONF):
         """Constructor - create the keyclient."""
         LOG.debug("starting DogtagKRAPlugin init")
-        crypto, create_nss_db = setup_nss_db(conf)
+        crypto, create_nss_db = setup_nss_db(conf, 'kra')
         connection = create_connection(conf, 'kra')
 
         # create kraclient
@@ -240,6 +252,8 @@ class DogtagKRAPlugin(sstore.SecretStoreBase):
             passphrase=None
         )
 
+        generated = secret_metadata.get(DogtagKRAPlugin.GENERATED, False)
+
         passphrase = self._get_passphrase_for_a_private_key(
             secret_type, secret_metadata, key_spec)
 
@@ -288,7 +302,7 @@ class DogtagKRAPlugin(sstore.SecretStoreBase):
                 if key_spec.alg.upper() == key.KeyClient.RSA_ALGORITHM:
                     recovered_key = (
                         (RSA.importKey(key_data.data)
-                         .exportKey('PEM', passphrase))
+                         .exportKey('PEM', passphrase, 8))
                         .encode('utf-8')
                     )
                 elif key_spec.alg.upper() == key.KeyClient.DSA_ALGORITHM:
@@ -317,6 +331,10 @@ class DogtagKRAPlugin(sstore.SecretStoreBase):
 
         # TODO(alee) remove final field when content_type is removed
         # from secret_dto
+
+        if generated:
+            recovered_key = base64.b64encode(recovered_key)
+
         ret = sstore.SecretDTO(
             type=secret_type,
             secret=recovered_key,
@@ -363,13 +381,26 @@ class DogtagKRAPlugin(sstore.SecretStoreBase):
             algorithm,
             key_spec.bit_length,
             usages)
+
+        # Barbican expects stored keys to be base 64 encoded.  We need to
+        # add flag to the keyclient.generate_symmetric_key() call above
+        # to ensure that the key that is stored is base64 encoded.
+        #
+        # As a workaround until that update is available, we will store a
+        # parameter "generated"  to indicate that the response must be base64
+        # encoded on retrieval.  Note that this will not work for transport
+        # key encoded data.
         return {DogtagKRAPlugin.ALG: key_spec.alg,
                 DogtagKRAPlugin.BIT_LENGTH: key_spec.bit_length,
                 DogtagKRAPlugin.SECRET_MODE: key_spec.mode,
-                DogtagKRAPlugin.KEY_ID: response.get_key_id()}
+                DogtagKRAPlugin.KEY_ID: response.get_key_id(),
+                DogtagKRAPlugin.GENERATED: True}
 
     def generate_asymmetric_key(self, key_spec):
-        """Generate an asymmetric key."""
+        """Generate an asymmetric key.
+
+        Note that barbican expects all secrets to be base64 encoded.
+        """
 
         usages = [key.AsymKeyGenerationRequest.DECRYPT_USAGE,
                   key.AsymKeyGenerationRequest.ENCRYPT_USAGE]
@@ -393,12 +424,21 @@ class DogtagKRAPlugin(sstore.SecretStoreBase):
             stored_passphrase_info = self.keyclient.archive_key(
                 uuid.uuid4().hex,
                 self.keyclient.PASS_PHRASE_TYPE,
-                passphrase)
+                base64.b64encode(passphrase))
 
             passphrase_key_id = stored_passphrase_info.get_key_id()
             passphrase_metadata = {
                 DogtagKRAPlugin.KEY_ID: passphrase_key_id
             }
+
+        # Barbican expects stored keys to be base 64 encoded.  We need to
+        # add flag to the keyclient.generate_asymmetric_key() call above
+        # to ensure that the key that is stored is base64 encoded.
+        #
+        # As a workaround until that update is available, we will store a
+        # parameter "generated"  to indicate that the response must be base64
+        # encoded on retrieval.  Note that this will not work for transport
+        # key encoded data.
 
         response = self.keyclient.generate_asymmetric_key(
             client_key_id,
@@ -410,14 +450,16 @@ class DogtagKRAPlugin(sstore.SecretStoreBase):
             DogtagKRAPlugin.ALG: key_spec.alg,
             DogtagKRAPlugin.BIT_LENGTH: key_spec.bit_length,
             DogtagKRAPlugin.KEY_ID: response.get_key_id(),
-            DogtagKRAPlugin.CONVERT_TO_PEM: "true"
+            DogtagKRAPlugin.CONVERT_TO_PEM: "true",
+            DogtagKRAPlugin.GENERATED: True
         }
 
         private_key_metadata = {
             DogtagKRAPlugin.ALG: key_spec.alg,
             DogtagKRAPlugin.BIT_LENGTH: key_spec.bit_length,
             DogtagKRAPlugin.KEY_ID: response.get_key_id(),
-            DogtagKRAPlugin.CONVERT_TO_PEM: "true"
+            DogtagKRAPlugin.CONVERT_TO_PEM: "true",
+            DogtagKRAPlugin.GENERATED: True
         }
 
         if passphrase_key_id:
@@ -511,6 +553,11 @@ class DogtagKRAPlugin(sstore.SecretStoreBase):
                         "passphrase in the database, for being used during "
                         "retrieval.").format(secret_type=secret_type)
                 )
+
+        # note that Barbican expects the passphrase to be base64 encoded when
+        # stored, so we need to decode it.
+        if passphrase:
+            passphrase = base64.b64decode(passphrase)
         return passphrase
 
     @staticmethod
@@ -566,7 +613,7 @@ class DogtagCAPlugin(cm.CertificatePluginBase):
 
     def __init__(self, conf=CONF):
         """Constructor - create the cert clients."""
-        crypto, create_nss_db = setup_nss_db(conf)
+        crypto, create_nss_db = setup_nss_db(conf, 'ca')
         connection = create_connection(conf, 'ca')
         self.certclient = pki.cert.CertClient(connection)
 
@@ -574,6 +621,7 @@ class DogtagCAPlugin(cm.CertificatePluginBase):
             crypto.initialize()
 
         self.simple_cmc_profile = conf.dogtag_plugin.simple_cmc_profile
+        self.auto_approved_profiles = conf.dogtag_plugin.auto_approved_profiles
 
     def _get_request_id(self, order_id, plugin_meta, operation):
         request_id = plugin_meta.get(self.REQUEST_ID, None)
@@ -732,20 +780,20 @@ class DogtagCAPlugin(cm.CertificatePluginBase):
         if barbican_meta_dto.generated_csr is not None:
             csr = barbican_meta_dto.generated_csr
         else:
-            csr = order_meta.get('request_data')
+            # we expect the CSR to be base64 encoded PEM
+            # Dogtag CA needs it to be unencoded
+            csr = base64.b64decode(order_meta.get('request_data'))
 
-        profile_id = self.simple_cmc_profile
+        profile_id = order_meta.get('profile', self.simple_cmc_profile)
         inputs = {
             'cert_request_type': 'pkcs10',
             'cert_request': csr
         }
 
-        request = self.certclient.create_enrollment_request(profile_id, inputs)
-        results = self.certclient.submit_enrollment_request(request)
-        return self._process_enrollment_results(results,
-                                                plugin_meta,
-                                                barbican_meta_dto)
+        return self._issue_certificate_request(
+            profile_id, inputs, plugin_meta, barbican_meta_dto)
 
+    @_catch_enrollment_exceptions
     def _issue_full_cmc_request(self, order_id, order_meta, plugin_meta,
                                 barbican_meta_dto):
         """Issue a full CMC request to the Dogtag CA.
@@ -760,6 +808,7 @@ class DogtagCAPlugin(cm.CertificatePluginBase):
             "Dogtag plugin does not support %s request type".format(
                 cm.CertificateRequestType.FULL_CMC_REQUEST))
 
+    @_catch_enrollment_exceptions
     def _issue_stored_key_request(self, order_id, order_meta, plugin_meta,
                                   barbican_meta_dto):
         """Issue a simple CMC request to the Dogtag CA.
@@ -781,11 +830,6 @@ class DogtagCAPlugin(cm.CertificatePluginBase):
                                           plugin_meta, barbican_meta_dto):
         """Issue a custom certificate request to Dogtag CA
 
-        For now, we assume that we are talking to the Dogtag CA that
-        is deployed with the KRA back-end, and we are connected as a
-        CA agent.  This means that we can use the agent convenience
-        method to automatically approve the certificate request.
-
         :param order_id: ID of the order associated with this request
         :param order_meta: dict containing all the inputs required for a
             particular profile.  One of these must be the profile_id.
@@ -803,14 +847,48 @@ class DogtagCAPlugin(cm.CertificatePluginBase):
                 cm.CertificateStatus.CLIENT_DATA_ISSUE_SEEN,
                 status_message=u._("No profile_id specified"))
 
-        results = self.certclient.enroll_cert(profile_id, order_meta)
-        return self._process_enrollment_results(results,
-                                                plugin_meta,
-                                                barbican_meta_dto)
+        # we expect the csr to be base64 encoded PEM data.  Dogtag CA expects
+        # PEM data though so we need to decode it.
+        updated_meta = copy.deepcopy(order_meta)
+        if 'cert_request' in updated_meta:
+            updated_meta['cert_request'] = base64.b64decode(
+                updated_meta['cert_request'])
 
-    def _process_enrollment_results(self, enrollment_results, plugin_meta,
-                                    barbican_meta_dto):
-        """Process results received from Dogtag CA for enrollment
+        return self._issue_certificate_request(
+            profile_id, updated_meta, plugin_meta, barbican_meta_dto)
+
+    def _issue_certificate_request(self, profile_id, inputs, plugin_meta,
+                                   barbican_meta_dto):
+        """Actually send the cert request to the Dogtag CA
+
+        If the profile_id is one of the auto-approved profiles, then use
+        the convenience enroll_cert() method to create and approve the request
+        using the Barbican agent cert credentials.  If not, then submit the
+        request and wait for approval by a CA agent on the Dogtag CA.
+
+        :param profile_id: enrollment profile
+        :param inputs: dict of request inputs
+        :param plugin_meta: Used to store data for status check.
+        :param barbican_meta_dto: Extra data to aid in processing.
+        :return: cm.ResultDTO
+        """
+        if profile_id in self.auto_approved_profiles:
+            results = self.certclient.enroll_cert(profile_id, inputs)
+            return self._process_auto_enrollment_results(
+                results, plugin_meta, barbican_meta_dto)
+        else:
+            request = self.certclient.create_enrollment_request(
+                profile_id, inputs)
+            results = self.certclient.submit_enrollment_request(request)
+            return self._process_pending_enrollment_results(
+                results, plugin_meta, barbican_meta_dto)
+
+    def _process_auto_enrollment_results(self, enrollment_results,
+                                         plugin_meta, barbican_meta_dto):
+        """Process results received from Dogtag CA for auto-enrollment
+
+        This processes data from enroll_cert, which submits, approves and
+        gets the cert issued and returns as a list of CertEnrollment objects.
 
         :param enrollment_results: list of CertEnrollmentResult objects
         :param plugin_meta: metadata dict for storing plugin specific data
@@ -823,7 +901,6 @@ class DogtagCAPlugin(cm.CertificatePluginBase):
         # of enroll_cert, Barbican cannot handle this case.  Assume
         # only once cert and request generated for now.
         enrollment_result = enrollment_results[0]
-
         request = enrollment_result.request
         if not request:
             raise cm.CertificateGeneralException(
@@ -833,32 +910,69 @@ class DogtagCAPlugin(cm.CertificatePluginBase):
         plugin_meta[self.REQUEST_ID] = request.request_id
 
         cert = enrollment_result.cert
-        if not cert:
-            request_status = request.request_status
-            if request_status == pki.cert.CertRequestStatus.REJECTED:
-                return cm.ResultDTO(
-                    cm.CertificateStatus.CLIENT_DATA_ISSUE_SEEN,
-                    status_message=request.error_message)
-            elif request_status == pki.cert.CertRequestStatus.CANCELED:
-                return cm.ResultDTO(cm.CertificateStatus.REQUEST_CANCELED)
-            elif request_status == pki.cert.CertRequestStatus.PENDING:
-                return cm.ResultDTO(cm.CertificateStatus.WAITING_FOR_CA)
-            elif request_status == pki.cert.CertRequestStatus.COMPLETE:
-                raise cm.CertificateGeneralException(
-                    u._("request_id {req_id} returns COMPLETE but no cert "
-                        "returned").format(req_id=request.request_id))
+
+        return self._create_dto(request.request_status,
+                                request.request_id,
+                                request.error_message,
+                                cert)
+
+    def _process_pending_enrollment_results(self, results, plugin_meta,
+                                            barbican_meta_dto):
+        """Process results received from Dogtag CA for pending enrollment
+
+        This method processes data returned by submit_enrollment_request(),
+        which creates requests that still need to be approved by an agent.
+
+        :param results: CertRequestInfoCollection object
+        :param plugin_meta: metadata dict for storing plugin specific data
+        :param barbican_meta_dto: object containing extra data to help process
+               the request
+        :return: cm.ResultDTO
+        """
+
+        # Although it is possible to create multiple certs in an invocation
+        # of enroll_cert, Barbican cannot handle this case.  Assume
+        # only once cert and request generated for now
+
+        cert_request_info = results.cert_request_info_list[0]
+        status = cert_request_info.request_status
+        request_id = getattr(cert_request_info, 'request_id', None)
+        error_message = getattr(cert_request_info, 'error_message', None)
+
+        # store the request_id in the plugin metadata
+        if request_id:
+            plugin_meta[self.REQUEST_ID] = request_id
+
+        return self._create_dto(status, request_id, error_message, None)
+
+    def _create_dto(self, request_status, request_id, error_message, cert):
+        dto = None
+        if request_status == pki.cert.CertRequestStatus.COMPLETE:
+            if cert is not None:
+                dto = cm.ResultDTO(cm.CertificateStatus.CERTIFICATE_GENERATED,
+                                   certificate=cert.encoded,
+                                   intermediates=cert.pkcs7_cert_chain)
             else:
                 raise cm.CertificateGeneralException(
-                    u._("Invalid request_status {status} for "
-                        "request_id {request_id}").format(
-                            status=request_status,
-                            request_id=request.request_id)
-                )
+                    u._("request_id {req_id} returns COMPLETE but no cert "
+                        "returned").format(req_id=request_id))
 
-        return cm.ResultDTO(
-            cm.CertificateStatus.CERTIFICATE_GENERATED,
-            certificate=cert.encoded,
-            intermediates=cert.pkcs7_cert_chain)
+        elif request_status == pki.cert.CertRequestStatus.REJECTED:
+            dto = cm.ResultDTO(cm.CertificateStatus.CLIENT_DATA_ISSUE_SEEN,
+                               status_message=error_message)
+        elif request_status == pki.cert.CertRequestStatus.CANCELED:
+            dto = cm.ResultDTO(cm.CertificateStatus.REQUEST_CANCELED)
+        elif request_status == pki.cert.CertRequestStatus.PENDING:
+            dto = cm.ResultDTO(cm.CertificateStatus.WAITING_FOR_CA)
+        else:
+            raise cm.CertificateGeneralException(
+                u._("Invalid request_status {status} for "
+                    "request_id {request_id}").format(
+                        status=request_status,
+                        request_id=request_id)
+            )
+
+        return dto
 
     def modify_certificate_request(self, order_id, order_meta, plugin_meta,
                                    barbican_meta_dto):

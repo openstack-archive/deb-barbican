@@ -22,14 +22,14 @@ from barbican.model import models
 from barbican.plugin.crypto import crypto
 from barbican.plugin.interface import secret_store
 from barbican.plugin import store_crypto
-from barbican.plugin.util import translations
 from barbican.tests import utils as test_utils
 
 
 def get_private_dto():
     spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 1024)
     return secret_store.SecretDTO(secret_store.SecretType.PRIVATE,
-                                  test_utils.get_private_key(),
+                                  base64.b64encode(
+                                      test_utils.get_private_key()),
                                   spec,
                                   'application/pkcs8')
 
@@ -37,7 +37,8 @@ def get_private_dto():
 def get_public_dto():
     spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 1024)
     return secret_store.SecretDTO(secret_store.SecretType.PUBLIC,
-                                  test_utils.get_public_key(),
+                                  base64.b64encode(
+                                      test_utils.get_public_key()),
                                   spec,
                                   'application/octet-stream')
 
@@ -45,14 +46,10 @@ def get_public_dto():
 def get_certificate_dto():
     spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 1024)
     return secret_store.SecretDTO(secret_store.SecretType.CERTIFICATE,
-                                  test_utils.get_certificate(),
+                                  base64.b64encode(
+                                      test_utils.get_certificate()),
                                   spec,
                                   'application/pkix-cert')
-
-
-def get_pem_content(pem):
-    b64_content = translations.get_pem_components(pem)[1]
-    return base64.b64decode(b64_content)
 
 
 class TestSecretStoreBase(testtools.TestCase,
@@ -216,8 +213,7 @@ class WhenTestingStoreCrypto(TestSecretStoreBase):
 
         self.assertEqual(None, response_dict)
 
-        content = translations.get_pem_components(secret_dto.secret)[1]
-        raw_content = base64.b64decode(content)
+        raw_content = base64.b64decode(secret_dto.secret)
 
         # Verify encrypt plugin and method where invoked.
         encrypt_mock = self.encrypting_plugin.encrypt
@@ -240,8 +236,9 @@ class WhenTestingStoreCrypto(TestSecretStoreBase):
         # Verify response.
         self.assertIsInstance(secret_dto, secret_store.SecretDTO)
         self.assertEqual(secret_store.SecretType.OPAQUE, secret_dto.type)
-        self.assertEqual(base64.b64encode(self.decrypted_secret),
-                         secret_dto.secret)
+        self.assertEqual(
+            base64.encodestring(self.decrypted_secret).rstrip('\n'),
+            secret_dto.secret)
         self.assertEqual(
             self.encrypted_datum_model.content_type, secret_dto.content_type)
         self.assertIsInstance(secret_dto.key_spec, secret_store.KeySpec)
@@ -286,8 +283,7 @@ class WhenTestingStoreCrypto(TestSecretStoreBase):
         secret_type = input_secret_dto.type
 
         decrypt_mock = self.retrieving_plugin.decrypt
-        content = translations.get_pem_components(secret)[1]
-        decrypt_mock.return_value = base64.b64decode(content)
+        decrypt_mock.return_value = base64.decodestring(secret)
 
         secret_model = self.context.secret_model
         secret_model.algorithm = key_spec.alg
@@ -301,8 +297,8 @@ class WhenTestingStoreCrypto(TestSecretStoreBase):
 
         # Verify response.
         self.assertIsInstance(secret_dto, secret_store.SecretDTO)
-        self.assertEqual(secret_type, secret_dto.type)
         self.assertEqual(secret, secret_dto.secret)
+        self.assertEqual(secret_type, secret_dto.type)
         self.assertIsInstance(secret_dto.key_spec, secret_store.KeySpec)
         self.assertEqual(
             secret_model.algorithm, secret_dto.key_spec.alg)
@@ -729,7 +725,8 @@ class WhenTestingStoreCryptoStoreSecretAndDatum(TestSecretStoreBase):
         self.assertEqual(
             self.content_type, test_datum_model.content_type)
         self.assertEqual(
-            base64.b64encode(self.cypher_text), test_datum_model.cypher_text)
+            base64.encodestring(self.cypher_text).rstrip('\n'),
+            test_datum_model.cypher_text)
         self.assertEqual(
             self.response_dto.kek_meta_extended,
             test_datum_model.kek_meta_extended)

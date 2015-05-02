@@ -40,7 +40,7 @@ def get_private_key_req():
             'algorithm': 'rsa',
             'bit_length': 1024,
             'secret_type': 'private',
-            'payload': utils.get_private_key()}
+            'payload': base64.b64encode(utils.get_private_key())}
 
 
 def get_public_key_req():
@@ -50,7 +50,7 @@ def get_public_key_req():
             'algorithm': 'rsa',
             'bit_length': 1024,
             'secret_type': 'public',
-            'payload': utils.get_public_key()}
+            'payload': base64.b64encode(utils.get_public_key())}
 
 
 def get_certificate_req():
@@ -60,7 +60,7 @@ def get_certificate_req():
             'algorithm': 'rsa',
             'bit_length': 1024,
             'secret_type': 'certificate',
-            'payload': utils.get_certificate()}
+            'payload': base64.b64encode(utils.get_certificate())}
 
 
 def get_passphrase_req():
@@ -902,13 +902,13 @@ class SecretsTestCase(base.TestCase):
                           get_default_payload()),
                       get_default_data()],
         'private': ['private',
-                    get_pem_content(utils.get_private_key()),
+                    utils.get_private_key(),
                     get_private_key_req()],
         'public': ['public',
-                   get_pem_content(utils.get_public_key()),
+                   utils.get_public_key(),
                    get_public_key_req()],
         'certificate': ['certificate',
-                        get_pem_content(utils.get_certificate()),
+                        utils.get_certificate(),
                         get_certificate_req()],
         'passphrase': ['passphrase',
                        'mysecretpassphrase',
@@ -932,3 +932,84 @@ class SecretsTestCase(base.TestCase):
         get_resp = self.behaviors.get_secret(secret_ref,
                                              content_type)
         self.assertEqual(expected, get_resp.content)
+
+    @utils.parameterized_dataset({
+        'invalid_http_content_type_characaters_latin': {
+            'http_content_type': u'\u00c4'.encode('utf-8')},
+
+        'invalid_http_content_type_characaters_arabic': {
+            'http_content_type': u'\u060f'.encode('utf-8')},
+
+        'invalid_http_content_type_characaters_cyrillic': {
+            'http_content_type': u'\u0416'.encode('utf-8')},
+
+        'invalid_http_content_type_characaters_replacement_character': {
+            'http_content_type': u'\ufffd'.encode('utf-8')},
+    })
+    @testcase.attr('negative')
+    def test_secret_create_with_invalid_http_content_type_characters(
+            self, http_content_type):
+        """Attempt to create secrets with invalid unicode characters in the
+
+        HTTP request's Content-Type header. Should return a 415.
+        """
+        test_model = secret_models.SecretModel(
+            **self.default_secret_create_data)
+
+        headers = {"Content-Type": http_content_type}
+
+        resp, secret_ref = self.behaviors.create_secret(test_model, headers)
+        self.assertEqual(resp.status_code, 415)
+
+    @utils.parameterized_dataset({
+        'invalid_http_content_type_characaters_latin': {
+            'payload_content_type': u'\u00c4'.encode('utf-8')},
+
+        'invalid_http_content_type_characaters_arabic': {
+            'payload_content_type': u'\u060f'.encode('utf-8')},
+
+        'invalid_http_content_type_characaters_cyrillic': {
+            'payload_content_type': u'\u0416'.encode('utf-8')},
+
+        'invalid_http_content_type_characaters_replacement_character': {
+            'payload_content_type': u'\ufffd'.encode('utf-8')},
+    })
+    @testcase.attr('negative')
+    def test_secret_create_with_invalid_payload_content_type_characters(
+            self, payload_content_type):
+        """Attempt to create secrets with non-ascii characters in the
+
+        payload's content type attribute. Should return a 400.
+        """
+        test_model = secret_models.SecretModel(
+            **self.default_secret_create_data)
+        test_model.payload_content_type = payload_content_type
+
+        resp, secret_ref = self.behaviors.create_secret(test_model)
+        self.assertEqual(resp.status_code, 400)
+
+
+class SecretsPagingTestCase(base.PagingTestCase):
+
+    def setUp(self):
+        super(SecretsPagingTestCase, self).setUp()
+        self.behaviors = secret_behaviors.SecretBehaviors(self.client)
+
+        # make a local mutable copy of the default data to prevent
+        # possible data contamination
+        self.create_default_data = get_default_data()
+
+    def tearDown(self):
+        self.behaviors.delete_all_created_secrets()
+        super(SecretsPagingTestCase, self).tearDown()
+
+    def create_model(self):
+        return secret_models.SecretModel(**self.create_default_data)
+
+    def create_resources(self, count=0, model=None):
+        for x in range(0, count):
+            self.behaviors.create_secret(model)
+
+    def get_resources(self, limit=10, offset=0, name_filter=""):
+        return self.behaviors.get_secrets(limit=limit, offset=offset,
+                                          name_filter=name_filter)

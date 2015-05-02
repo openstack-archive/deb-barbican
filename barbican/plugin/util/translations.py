@@ -13,6 +13,10 @@
 
 import base64
 
+from Crypto.PublicKey import RSA
+from OpenSSL import crypto
+
+from barbican import i18n as u  # noqa
 from barbican.plugin.interface import secret_store as s
 from barbican.plugin.util import mime_types
 
@@ -24,54 +28,46 @@ def normalize_before_encryption(unencrypted, content_type, content_encoding,
     This normalizes the secrets before they are handed off to the SecretStore
     for storage. This converts all data to Base64 data. If the data is plain
     text then it encoded using utf-8 first and then Base64 encoded. Binary
-    data is simply converted to Base64. In addition if the secret type is
-    one of private, public, or certificate then the PEM headers are added
-    to the Base64 encoding.
+    data is simply converted to Base64.
+
+    :param str unencrypted: Raw payload
+    :param str content_type: The media type for the payload
+    :param str content_encoding: Transfer encoding
+    :param str secret_type: The type of secret
+    :param bool enforce_text_only: Require text content_type or base64
+        content_encoding
+    :returns: Tuple containing the normalized (base64 encoded) payload and
+        the normalized media type.
     """
     if not unencrypted:
         raise s.SecretNoPayloadProvidedException()
 
     # Validate and normalize content-type.
-    normalized_mime = normalize_content_type(content_type)
+    normalized_media_type = normalize_content_type(content_type)
 
     # Process plain-text type.
-    if normalized_mime in mime_types.PLAIN_TEXT:
+    if normalized_media_type in mime_types.PLAIN_TEXT:
         # normalize text to binary and then base64 encode it
-        unencrypted = unencrypted.encode('utf-8')
-        unencrypted = base64.b64encode(unencrypted)
+        unencrypted_bytes = unencrypted.encode('utf-8')
+        b64payload = base64.b64encode(unencrypted_bytes)
 
     # Process binary type.
     else:
-        if content_encoding:
-            content_encoding = content_encoding.lower()
-        if content_encoding == 'base64':
+        if not content_encoding:
+            b64payload = base64.b64encode(unencrypted)
+        elif content_encoding.lower() == 'base64':
             b64payload = unencrypted
-            if is_pem_payload(unencrypted):
-                pem_components = get_pem_components(unencrypted)
-                b64payload = pem_components[1]
-            try:
-                base64.b64decode(b64payload)
-            except TypeError:
-                raise s.SecretPayloadDecodingError()
-        elif mime_types.use_binary_content_as_is(content_type,
-                                                 content_encoding):
-            if (secret_type == s.SecretType.PRIVATE or
-                    secret_type == s.SecretType.PUBLIC or
-                    secret_type == s.SecretType.CERTIFICATE):
-                unencrypted = to_pem(secret_type, unencrypted)
-            else:
-                unencrypted = base64.b64encode(unencrypted)
         elif enforce_text_only:
             # For text-based protocols (such as the one-step secret POST),
             #   only 'base64' encoding is possible/supported.
             raise s.SecretContentEncodingMustBeBase64()
-        elif content_encoding:
+        else:
             # Unsupported content-encoding request.
             raise s.SecretContentEncodingNotSupportedException(
                 content_encoding
             )
 
-    return unencrypted, normalized_mime
+    return b64payload, normalized_media_type
 
 
 def normalize_content_type(content_type):
@@ -95,6 +91,7 @@ def denormalize_after_decryption(unencrypted, content_type):
     returned from the SecretStore is the unencrypted parameter. This
     'denormalizes' the data back to its binary format.
     """
+
     # Process plain-text type.
     if content_type in mime_types.PLAIN_TEXT:
         # normalize text to binary string
@@ -106,8 +103,6 @@ def denormalize_after_decryption(unencrypted, content_type):
 
     # Process binary type.
     elif content_type in mime_types.BINARY:
-        if is_pem_payload(unencrypted):
-            unencrypted = get_pem_components(unencrypted)[1]
         unencrypted = base64.b64decode(unencrypted)
     else:
         raise s.SecretContentTypeNotSupportedException(content_type)
@@ -115,64 +110,61 @@ def denormalize_after_decryption(unencrypted, content_type):
     return unencrypted
 
 
-def get_pem_components(pem):
-    """Returns the PEM content, header, and footer.
-
-    This parses the PEM string and returns the PEM header, content, and footer.
-    The content is the base64 encoded bytes without the header and footer. This
-    is returned as a list. The order of the list is header, content, footer.
-    """
-    delim = "-----"
-    splits = pem.split(delim)
-    if len(splits) != 5 or splits[0] != "" or splits[4] != "":
-        raise s.SecretPayloadDecodingError()
-    header = delim + splits[1] + delim
-    content = splits[2]
-    footer = delim + splits[3] + delim
-    return (header, content, footer)
-
-
-def is_pem_payload(payload):
-    """Tests whether payload is in PEM format.
-
-    This parses the payload for the PEM header and footer strings. If it finds
-    the header and footer strings then it is assumed to be a PEM payload.
-    """
-    delim = "-----"
-    splits = payload.split(delim)
-    if len(splits) != 5 or splits[0] != "" or splits[4] != "":
-        return False
-    else:
-        return True
-
-
-def to_pem(secret_type, payload, payload_encoded=False):
-    """Converts payload to PEM format.
-
-    This converts the payload to Base 64 encoding if payload_encoded is False
-    and then adds PEM headers. This uses the secret_type to determined the PEM
-    header.
-    """
-    pem = payload
-    if payload_encoded:
-        pem_content = payload
-    else:
-        pem_content = base64.b64encode(payload)
-
+def convert_pem_to_der(pem, secret_type):
     if secret_type == s.SecretType.PRIVATE:
-        headers = _get_pem_headers("PRIVATE KEY")
-        pem = headers[0] + pem_content + headers[1]
+        return _convert_private_pem_to_der(pem)
     elif secret_type == s.SecretType.PUBLIC:
-        headers = _get_pem_headers("PUBLIC KEY")
-        pem = headers[0] + pem_content + headers[1]
+        return _convert_public_pem_to_der(pem)
     elif secret_type == s.SecretType.CERTIFICATE:
-        headers = _get_pem_headers("CERTIFICATE")
-        pem = headers[0] + pem_content + headers[1]
+        return _convert_certificate_pem_to_der(pem)
+    else:
+        reason = u._("Secret type can not be converted to DER")
+        raise s.SecretGeneralException(reason=reason)
 
+
+def convert_der_to_pem(der, secret_type):
+    if secret_type == s.SecretType.PRIVATE:
+        return _convert_private_der_to_pem(der)
+    elif secret_type == s.SecretType.PUBLIC:
+        return _convert_public_der_to_pem(der)
+    elif secret_type == s.SecretType.CERTIFICATE:
+        return _convert_certificate_der_to_pem(der)
+    else:
+        reason = u._("Secret type can not be converted to PEM")
+        raise s.SecretGeneralException(reason=reason)
+
+
+def _convert_private_pem_to_der(pem):
+    private_key = RSA.importKey(pem)
+    der = private_key.exportKey('DER', pkcs=8)
+    return der
+
+
+def _convert_private_der_to_pem(der):
+    private_key = RSA.importKey(der)
+    pem = private_key.exportKey('PEM', pkcs=8)
     return pem
 
 
-def _get_pem_headers(pem_name):
-    header = "-----BEGIN {}-----".format(pem_name)
-    footer = "-----END {}-----".format(pem_name)
-    return (header, footer)
+def _convert_public_pem_to_der(pem):
+    pubkey = RSA.importKey(pem)
+    der = pubkey.exportKey('DER')
+    return der
+
+
+def _convert_public_der_to_pem(der):
+    pubkey = RSA.importKey(der)
+    pem = pubkey.exportKey('PEM')
+    return pem
+
+
+def _convert_certificate_pem_to_der(pem):
+    cert = crypto.load_certificate(crypto.FILETYPE_PEM, pem)
+    der = crypto.dump_certificate(crypto.FILETYPE_ASN1, cert)
+    return der
+
+
+def _convert_certificate_der_to_pem(der):
+    cert = crypto.load_certificate(crypto.FILETYPE_ASN1, der)
+    pem = crypto.dump_certificate(crypto.FILETYPE_PEM, cert)
+    return pem

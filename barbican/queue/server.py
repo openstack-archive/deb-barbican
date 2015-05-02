@@ -16,6 +16,7 @@
 """
 Server-side (i.e. worker side) classes and logic.
 """
+import datetime
 import functools
 
 try:
@@ -29,9 +30,11 @@ from oslo_config import cfg
 
 from barbican.common import utils
 from barbican import i18n as u
+from barbican.model import models
 from barbican.model import repositories
 from barbican.openstack.common import service
 from barbican import queue
+from barbican.tasks import common
 from barbican.tasks import resources
 
 if newrelic_loaded:
@@ -42,6 +45,29 @@ LOG = utils.getLogger(__name__)
 CONF = cfg.CONF
 
 
+# Maps the common/shared RetryTasks (returned from lower-level business logic
+# and plugin processing) to top-level RPC tasks in the Tasks class below.
+MAP_RETRY_TASKS = {
+    common.RetryTasks.INVOKE_CERT_STATUS_CHECK_TASK: 'check_certificate_status'
+}
+
+
+def retryable_order(fn):
+    """Provides retry/scheduling support to Order-related tasks."""
+
+    @functools.wraps(fn)
+    def wrapper(method_self, *args, **kwargs):
+        result = fn(method_self, *args, **kwargs)
+        retry_rpc_method = schedule_order_retry_tasks(
+            fn, result, *args, **kwargs)
+        if retry_rpc_method:
+            LOG.info(
+                u._LI("Scheduled RPC method for retry: '%s'"),
+                retry_rpc_method)
+
+    return wrapper
+
+
 def transactional(fn):
     """Provides request-scoped database transaction support to tasks."""
 
@@ -50,7 +76,8 @@ def transactional(fn):
         fn_name = getattr(fn, '__name__', '????')
 
         if not queue.is_server_side():
-            fn(*args, **kwargs)  # Non-server mode directly invokes tasks.
+            # Non-server mode directly invokes tasks.
+            fn(*args, **kwargs)
             LOG.info(u._LI("Completed worker task: '%s'"), fn_name)
         else:
             # Manage session/transaction.
@@ -106,12 +133,67 @@ def monitored(fn):  # pragma: no cover
     return fn
 
 
+def schedule_order_retry_tasks(
+        invoked_task, retry_result, context, *args, **kwargs):
+    """Schedules an Order-related task for retry.
+
+    :param invoked_task: The RPC method that was just invoked.
+    :param retry_result: A :class:`FollowOnProcessingStatusDTO` if follow-on
+                         processing (such as retrying this or another task) is
+                         required, otherwise None indicates no such follow-on
+                         processing is required.
+    :param context: Queue context, not used.
+    :param order_id: ID of the Order entity the task to retry is for.
+    :param args: List of arguments passed in to the just-invoked task.
+    :param kwargs: Dict of arguments passed in to the just-invoked task.
+    :return: Returns the RPC task method scheduled for a retry, None if no RPC
+             task was scheduled.
+    """
+
+    retry_rpc_method = None
+    order_id = kwargs.get('order_id')
+
+    if not retry_result or not order_id:
+        pass
+
+    elif common.RetryTasks.INVOKE_SAME_TASK == retry_result.retry_task:
+        if invoked_task:
+            retry_rpc_method = getattr(
+                invoked_task, '__name__', None)
+
+    else:
+        retry_rpc_method = MAP_RETRY_TASKS.get(retry_result.retry_task)
+
+    if retry_rpc_method:
+        LOG.debug(
+            'Scheduling RPC method for retry: {0}'.format(retry_rpc_method))
+
+        date_to_retry_at = datetime.datetime.utcnow() + datetime.timedelta(
+            milliseconds=retry_result.retry_msec)
+
+        retry_model = models.OrderRetryTask()
+        retry_model.order_id = order_id
+        retry_model.retry_task = retry_rpc_method
+        retry_model.retry_at = date_to_retry_at
+        retry_model.retry_args = args
+        retry_model.retry_kwargs = kwargs
+        retry_model.retry_count = 0
+
+        retry_repo = repositories.get_order_retry_tasks_repository()
+        retry_repo.create_from(retry_model)
+
+    return retry_rpc_method
+
+
 class Tasks(object):
     """Tasks that can be invoked asynchronously in Barbican.
 
     Only place task methods and implementations on this class, as they can be
     called directly from the client side for non-asynchronous standalone
     single-node operation.
+
+    If a new method is added that can be retried, please also add its method
+    name to MAP_RETRY_TASKS above.
 
     The TaskServer class below extends this class to implement a worker-side
     server utilizing Oslo messaging's RPC server. This RPC server can invoke
@@ -120,23 +202,41 @@ class Tasks(object):
 
     @monitored
     @transactional
+    @retryable_order
     def process_type_order(self, context, order_id, project_id):
         """Process TypeOrder."""
         LOG.info(
             u._LI("Processing type order: order ID is '%s'"),
             order_id
         )
-        resources.BeginTypeOrder().process(order_id, project_id)
+        return resources.BeginTypeOrder().process_and_suppress_exceptions(
+            order_id, project_id)
 
     @monitored
     @transactional
+    @retryable_order
     def update_order(self, context, order_id, project_id, updated_meta):
         """Update Order."""
         LOG.info(
             u._LI("Processing update order: order ID is '%s'"),
             order_id
         )
-        resources.UpdateOrder().process(order_id, project_id, updated_meta)
+        return resources.UpdateOrder().process_and_suppress_exceptions(
+            order_id, project_id, updated_meta)
+
+    @monitored
+    @transactional
+    @retryable_order
+    def check_certificate_status(self, context, order_id, project_id):
+        """Check the status of a certificate order."""
+        LOG.info(
+            u._LI("Processing check certificate status on order: order ID is "
+                  "'%s'"),
+            order_id
+        )
+        check_cert_order = resources.CheckCertificateStatusOrder()
+        return check_cert_order.process_and_suppress_exceptions(
+            order_id, project_id)
 
 
 class TaskServer(Tasks, service.Service):

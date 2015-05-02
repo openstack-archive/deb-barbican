@@ -314,19 +314,12 @@ class KMIPSecretStore(ss.SecretStoreBase):
         template_attribute = kmip_objects.TemplateAttribute(
             attributes=attribute_list)
 
-        normalized_secret = secret_dto.secret
-        if (secret_type == ss.SecretType.PRIVATE or
-                secret_type == ss.SecretType.PUBLIC or
-                secret_type == ss.SecretType.CERTIFICATE):
-            normalized_secret = translations.get_pem_components(
-                normalized_secret)[1]
-        normalized_secret = base64.b64decode(normalized_secret)
+        normalized_secret = self._normalize_secret(secret_dto.secret,
+                                                   secret_type)
 
         secret_features = {
             'key_format_type': key_format_type,
-            'key_value': {
-                'bytes': normalized_secret
-            },
+            'key_value': normalized_secret,
             'cryptographic_algorithm': algorithm_value,
             'cryptographic_length': secret_dto.key_spec.bit_length
         }
@@ -392,8 +385,9 @@ class KMIPSecretStore(ss.SecretStoreBase):
                 key_value_type = type(secret_block.key_value.key_material)
                 if (key_value_type == kmip_objects.KeyMaterialStruct or
                         key_value_type == kmip_objects.KeyMaterial):
-                    secret_value = base64.b64encode(
-                        secret_block.key_value.key_material.value)
+                    secret_value = self._denormalize_secret(
+                        secret_block.key_value.key_material.value,
+                        secret_type)
                 else:
                     msg = u._(
                         "Unknown key value type received from KMIP "
@@ -406,12 +400,6 @@ class KMIPSecretStore(ss.SecretStoreBase):
                     )
                     LOG.exception(msg)
                     raise ss.SecretGeneralException(msg)
-
-                if(secret_type == ss.SecretType.PRIVATE or
-                        secret_type == ss.SecretType.PUBLIC or
-                        secret_type == ss.SecretType.CERTIFICATE):
-                    secret_value = translations.to_pem(
-                        secret_type, secret_value, True)
 
                 secret_alg = self._map_algorithm_kmip_to_ss(
                     secret_block.cryptographic_algorithm.value)
@@ -616,3 +604,21 @@ class KMIPSecretStore(ss.SecretStoreBase):
                 u._('Bad key file permissions found, expected 400 '
                     'for path: {file_path}').format(file_path=path)
             )
+
+    def _normalize_secret(self, secret, secret_type):
+        """Normalizes secret for use by KMIP plugin"""
+        data = base64.b64decode(secret)
+        if secret_type in [ss.SecretType.PUBLIC,
+                           ss.SecretType.PRIVATE,
+                           ss.SecretType.CERTIFICATE]:
+            data = translations.convert_pem_to_der(data, secret_type)
+        return data
+
+    def _denormalize_secret(self, secret, secret_type):
+        """Converts secret back to the format expected by Barbican core"""
+        data = secret
+        if secret_type in [ss.SecretType.PUBLIC,
+                           ss.SecretType.PRIVATE,
+                           ss.SecretType.CERTIFICATE]:
+            data = translations.convert_der_to_pem(data, secret_type)
+        return base64.b64encode(data)

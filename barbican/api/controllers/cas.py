@@ -40,7 +40,7 @@ def _requested_preferred_ca_not_a_project_ca():
     )
 
 
-class CertificateAuthorityController(object):
+class CertificateAuthorityController(controllers.ACLMixin):
     """Handles certificate authority retrieval requests."""
 
     def __init__(self, ca):
@@ -179,14 +179,13 @@ class CertificateAuthorityController(object):
 
         preferred_ca = self.preferred_ca_repo.get_project_entities(
             project_model.id)
-        if preferred_ca:
-            self.preferred_ca_repo.delete_entity_by_id(
-                preferred_ca[0].id,
-                external_project_id)
-
-        preferred_ca = models.PreferredCertificateAuthority(
-            project_model.id, self.ca.id)
-        self.preferred_ca_repo.create_from(preferred_ca)
+        if preferred_ca is not None:
+            self.preferred_ca_repo.update_preferred_ca(project_model.id,
+                                                       self.ca)
+        else:
+            preferred_ca = models.PreferredCertificateAuthority(
+                project_model.id, self.ca.id)
+            self.preferred_ca_repo.create_from(preferred_ca)
 
     @pecan.expose()
     @controllers.handle_exceptions(u._('Set global preferred CA'))
@@ -196,16 +195,18 @@ class CertificateAuthorityController(object):
             pecan.abort(405)
 
         LOG.debug("== Set global preferred CA %s", self.ca.id)
-        self._remove_global_preferred_ca(external_project_id)
-
-        global_preferred_ca = models.PreferredCertificateAuthority(
-            self.preferred_ca_repo.PREFERRED_PROJECT_ID,
-            self.ca.id)
-        self.preferred_ca_repo.create_from(global_preferred_ca)
+        pref_ca = self.preferred_ca_repo.get_global_preferred_ca()
+        if pref_ca is None:
+            global_preferred_ca = models.PreferredCertificateAuthority(
+                self.preferred_ca_repo.PREFERRED_PROJECT_ID,
+                self.ca.id)
+            self.preferred_ca_repo.create_from(global_preferred_ca)
+        else:
+            self.preferred_ca_repo.update_global_preferred_ca(self.ca)
 
     @pecan.expose()
     @controllers.handle_exceptions(u._('Unset global preferred CA'))
-    @controllers.enforce_rbac('certificate_authority:remove_from_project')
+    @controllers.enforce_rbac('certificate_authority:unset_global_preferred')
     def unset_global_preferred(self, external_project_id):
         if pecan.request.method != 'POST':
             pecan.abort(405)
@@ -221,7 +222,7 @@ class CertificateAuthorityController(object):
                 external_project_id)
 
 
-class CertificateAuthoritiesController(object):
+class CertificateAuthoritiesController(controllers.ACLMixin):
     """Handles certificate authority list requests."""
 
     def __init__(self):

@@ -23,6 +23,7 @@ from oslo_config import cfg
 import six
 
 from barbican.common import exception
+from barbican.common import hrefs
 from barbican.common import utils
 from barbican import i18n as u
 from barbican.model import models
@@ -30,7 +31,6 @@ from barbican.model import repositories as repo
 from barbican.openstack.common import timeutils
 from barbican.plugin.interface import secret_store
 from barbican.plugin.util import mime_types
-from barbican.plugin.util import translations
 
 
 LOG = utils.getLogger(__name__)
@@ -44,6 +44,8 @@ CONF = cfg.CONF
 CONF.register_opts(common_opts)
 
 MYSQL_SMALL_INT_MAX = 32767
+
+ACL_OPERATIONS = ['read', 'write', 'delete', 'list']
 
 
 def secret_too_big(data):
@@ -84,6 +86,33 @@ def validate_ca_id(project_id, order_meta):
     raise exception.CANotDefinedForProject(
         ca_id=ca_id,
         project_id=project_id)
+
+
+def validate_stored_key_rsa_container(project_id, container_ref):
+        try:
+            container_id = hrefs.get_container_id_from_ref(container_ref)
+        except Exception:
+            reason = u._("Bad Container Reference {ref}").format(
+                ref=container_ref
+            )
+            raise exception.InvalidContainer(reason=reason)
+
+        container_repo = repo.get_container_repository()
+        container = container_repo.get(container_id,
+                                       external_project_id=project_id,
+                                       suppress_exception=True)
+        if not container:
+            reason = u._("Container Not Found")
+            raise exception.InvalidContainer(reason=reason)
+
+        if container.type != 'rsa':
+            reason = u._("Container Wrong Type")
+            raise exception.InvalidContainer(reason=reason)
+
+        # TODO(dave) Validation should be done to determine if the
+        # requester of the certificate has permissions to access the
+        # keys in this container.  This can be done after the ACL patch
+        # has landed.
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -300,11 +329,7 @@ class NewSecretValidator(ValidatorBase):
                                               payload, schema_name):
         if payload_content_encoding == 'base64':
             try:
-                secret_payload = payload
-                if translations.is_pem_payload(payload):
-                    pems = translations.get_pem_components(payload)
-                    secret_payload = pems[1]
-                base64.b64decode(secret_payload)
+                base64.b64decode(payload)
             except TypeError:
                 LOG.exception("Problem parsing payload")
                 raise exception.InvalidObject(schema=schema_name,
@@ -396,13 +421,10 @@ class TypeOrderValidator(ValidatorBase):
         secret_validator = NewSecretValidator()
         secret_validator.validate(asymmetric_meta, parent_schema=self.name)
 
-        if (asymmetric_meta.get('payload_content_type', '').lower() !=
-                'application/octet-stream'):
-            raise exception.UnsupportedField(field='payload_content_type',
-                                             schema=schema_name,
-                                             reason=u._("Only 'application/oc"
-                                                        "tet-stream' "
-                                                        "supported"))
+        self._assert_validity(asymmetric_meta.get('payload') is None,
+                              schema_name,
+                              u._("'payload' not allowed "
+                                  "for asymmetric type order"), "meta")
 
         self._validate_meta_parameters(asymmetric_meta, "asymmetric key",
                                        schema_name)
@@ -415,6 +437,11 @@ class TypeOrderValidator(ValidatorBase):
 
     def _validate_certificate_meta(self, certificate_meta, schema_name):
         """Validation specific to meta for certificate type order."""
+
+        self._assert_validity(certificate_meta.get('payload') is None,
+                              schema_name,
+                              u._("'payload' not allowed "
+                                  "for certificate type order"), "meta")
 
         if 'profile' in certificate_meta:
             if 'ca_id' not in certificate_meta:
@@ -440,19 +467,21 @@ class TypeOrderValidator(ValidatorBase):
         self._validate_pkcs10_data(request_data)
 
     def _validate_full_cmc_request(self, certificate_meta):
-        """Validate full CMC request."""
-        request_data = self._get_required_metadata_value(
-            certificate_meta, "request_data")
-        self._validate_full_cmc_data(request_data)
+        """Validate full CMC request.
+
+        :param certificate_meta: request data from the order
+        :raises: FullCMCNotSupported
+        """
+        raise exception.FullCMCNotSupported()
 
     def _validate_stored_key_request(self, certificate_meta):
         """Validate stored-key cert request."""
-        container_ref = self._get_required_metadata_value(
+        self._get_required_metadata_value(
             certificate_meta, "container_ref")
-        self._validate_certificate_container(container_ref)
         subject_dn = self._get_required_metadata_value(
             certificate_meta, "subject_dn")
         self._validate_subject_dn_data(subject_dn)
+        # container will be validated by validate_stored_key_rsa_container()
 
         extensions = certificate_meta.get("extensions", None)
         if extensions:
@@ -469,14 +498,21 @@ class TypeOrderValidator(ValidatorBase):
         pass
 
     def _validate_pkcs10_data(self, request_data):
-        """Confirm that the request_data is valid PKCS#10.
+        """Confirm that the request_data is valid base64 encoded PKCS#10.
 
-        Parse data into the ASN.1 structure defined by PKCS10.
-        If parsing fails, raise InvalidPKCS10Data
+        Base64 decode the request, if it fails raise PayloadDecodingError.
+        Then parse data into the ASN.1 structure defined by PKCS10 and
+        verify the signing information.
+        If parsing of verifying fails, raise InvalidPKCS10Data.
         """
         try:
+            csr_pem = base64.b64decode(request_data)
+        except Exception:
+            raise exception.PayloadDecodingError()
+
+        try:
             csr = crypto.load_certificate_request(crypto.FILETYPE_PEM,
-                                                  request_data)
+                                                  csr_pem)
         except Exception:
             reason = u._("Bad format")
             raise exception.InvalidPKCS10Data(reason=reason)
@@ -498,21 +534,6 @@ class TypeOrderValidator(ValidatorBase):
         """
         pass
 
-    def _validate_certificate_container(self, public_key_ref):
-        """Confirm that the container contains the proper data."""
-        """
-        TODO(alee-3) complete this function
-
-        Check that the container:
-        * exists
-        * is of certificate type
-        * contains a public key which is accessible by the user
-        * contains a private key which is accessible by the user (note, this
-          is like POP-lite.  Someone should not be able to have the server
-          generate a CSR without being able to retrieve the private key.
-        """
-        pass
-
     def _validate_subject_dn_data(self, subject_dn):
         """Confirm that the subject_dn contains valid data
 
@@ -525,14 +546,21 @@ class TypeOrderValidator(ValidatorBase):
             raise exception.InvalidSubjectDN(subject_dn=subject_dn)
 
     def _validate_extensions_data(self, extensions):
-        """Confirm that the extensions data is valid."""
+        """Confirm that the extensions data is valid.
+
+        :param extensions: base 64 encoded ASN.1 string of extension data
+        :raises: CertificateExtensionsNotSupported
+        """
         """
         TODO(alee-3) complete this function
 
         Parse the extensions data into the correct ASN.1 structure.
-        If the parsing fails, throw InvalidExtensionsData
+        If the parsing fails, throw InvalidExtensionsData.
+
+        For now, fail this validation because extensions parsing is not
+        supported.
         """
-        pass
+        raise exception.CertificateExtensionsNotSupported()
 
     def _validate_meta_parameters(self, meta, order_type, schema_name):
         self._assert_validity(meta.get('algorithm'),
@@ -588,6 +616,45 @@ class TypeOrderValidator(ValidatorBase):
                                                     .format(order_type))
 
 
+class ACLValidator(ValidatorBase):
+    """Validate ACL(s)."""
+
+    def __init__(self):
+        self.name = 'ACL'
+
+        self.schema = {
+            "$schema": "http://json-schema.org/draft-04/schema#",
+            "definitions": {
+                "acl_defintion": {
+                    "type": "object",
+                    "properties": {
+                        "users": {
+                            "type": "array",
+                            "items": [
+                                {"type": "string", "maxLength": 255}
+                            ]
+                        },
+                        "creator-only": {"type": "boolean"}
+                    },
+                }
+            },
+            "type": "object",
+            "properties": {
+                "read": {"$ref": "#/definitions/acl_defintion"},
+                "write": {"$ref": "#/definitions/acl_defintion"},
+                "delete": {"$ref": "#/definitions/acl_defintion"},
+                "list": {"$ref": "#/definitions/acl_defintion"}
+            },
+            "additionalProperties": False
+        }
+
+    def validate(self, json_data, parent_schema=None):
+        schema_name = self._full_name(parent_schema)
+
+        self._assert_schema_is_valid(json_data, schema_name)
+        return json_data
+
+
 class ContainerConsumerValidator(ValidatorBase):
     """Validate a Consumer."""
 
@@ -597,7 +664,7 @@ class ContainerConsumerValidator(ValidatorBase):
             "type": "object",
             "properties": {
                 "URL": {"type": "string"},
-                "name": {"type": "string"}
+                "name": {"type": "string", "maxLength": 255}
             },
             "required": ["name", "URL"]
         }
