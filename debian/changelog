@@ -1,5 +1,5 @@
 barbican (2015.1.0-1) unstable; urgency=medium
 
-  * Initial release (Closes: #XXXXXX).
+  * Initial release (Closes: #784055).
 
  -- Thomas Goirand <zigo@debian.org>  Mon, 23 Mar 2015 17:46:24 +0100
