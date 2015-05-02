@@ -143,6 +143,7 @@ Description: OpenStack Key Management Service - Keystone Listener
  This package contains the Barbican Keystone Listener daemon.
 
 Package: barbican-doc
+Section: doc
 Architecture: all
 Depends: ${misc:Depends}, ${sphinxdoc:Depends}
 Description: OpenStack Key Management Service - doc
