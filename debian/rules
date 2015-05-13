@@ -33,6 +33,11 @@ override_dh_auto_install:
 
 override_dh_install:
 	dh_install --fail-missing
+	# Restore sanity...
+	for i in barbican-db-manage barbican-keystone-listener barbican-worker ; do \
+		mv $(CURDIR)/debian/barbican-common/usr/bin/$$i.py $(CURDIR)/debian/barbican-common/usr/bin/$$i ; \
+	done
+	rm $(CURDIR)/debian/barbican-common/usr/bin/barbican.sh
 
 override_dh_sphinxdoc:
 ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))
