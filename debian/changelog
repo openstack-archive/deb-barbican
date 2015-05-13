@@ -1,6 +1,7 @@
 barbican (2015.1.0-2) unstable; urgency=medium
 
   * Added uwsgi-core as Depends: for barbican-api.
+  * Fixed barbican-api init scripts.
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 13 May 2015 09:10:01 +0000
 
