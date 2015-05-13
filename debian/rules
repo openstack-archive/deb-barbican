@@ -31,6 +31,9 @@ endif
 override_dh_auto_install:
 	python setup.py install --root=debian/tmp --install-layout=deb
 
+override_dh_install:
+	dh_install --fail-missing
+
 override_dh_sphinxdoc:
 ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))
 	PYTHONPATH=. sphinx-build -b html doc/source $(CURDIR)/debian/barbican-doc/usr/share/doc/barbican-doc/html
