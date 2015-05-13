@@ -115,7 +115,8 @@ Description: OpenStack Key Management Service - common files
 
 Package: barbican-api
 Architecture: all
-Depends: barbican-common (= ${binary:Version}),
+Depends: uwsgi-core,
+         barbican-common (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends}
 Description: OpenStack Key Management Service - API Server
