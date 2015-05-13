@@ -17,7 +17,7 @@
 DESC="OpenStack Barbican Key Management APIs"
 PROJECT_NAME=barbican
 NAME=${PROJECT_NAME}-api
-
-script
-    uwsgi --master --die-on-term --emperor /etc/barbican/vassals --logto /var/log/barbican/barbican-api.log --stats localhost:9314
-end script
+DAEMON="uwsgi --master --die-on-term --emperor /etc/barbican/vassals --logto /var/log/barbican/barbican-api.log --stats localhost:9314"
+NO_OPENSTACK_CONFIG_FILE_DAEMON_ARG=yes
+USE_LOGFILE=no
+USE_SYSLOG=no
