@@ -100,6 +100,7 @@ Description: OpenStack Key Management Service - Python files
 Package: barbican-common
 Architecture: all
 Depends: adduser,
+         dbconfig-common,
          debconf,
          python-barbican (= ${binary:Version}),
          python-pysqlite2,

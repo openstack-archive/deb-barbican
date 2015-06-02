@@ -1,3 +1,9 @@
+barbican (2015.1.0-3) unstable; urgency=medium
+
+  * Added dbconfig-common as dependency of barbican-common (Closes: #787507).
+
+ -- Thomas Goirand <zigo@debian.org>  Tue, 02 Jun 2015 15:58:30 +0200
+
 barbican (2015.1.0-2) unstable; urgency=medium
 
   * Added uwsgi-core as Depends: for barbican-api.
