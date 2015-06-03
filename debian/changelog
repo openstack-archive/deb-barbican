@@ -1,6 +1,7 @@
 barbican (2015.1.0-3) unstable; urgency=medium
 
   * Added dbconfig-common as dependency of barbican-common (Closes: #787507).
+  * Added debian/po/POTFILES.in and ran debconf-updatepo.
 
  -- Thomas Goirand <zigo@debian.org>  Tue, 02 Jun 2015 15:58:30 +0200
 
