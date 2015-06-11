@@ -1,3 +1,9 @@
+barbican (2015.1.0-4) UNRELEASED; urgency=medium
+
+  * Fixes templates so that they don't reference Cinder (Closes: #787702).
+
+ -- Thomas Goirand <zigo@debian.org>  Thu, 11 Jun 2015 23:27:36 +0200
+
 barbican (2015.1.0-3) unstable; urgency=medium
 
   * Added dbconfig-common as dependency of barbican-common (Closes: #787507).
