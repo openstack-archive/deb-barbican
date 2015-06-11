@@ -1,6 +1,8 @@
-barbican (2015.1.0-4) UNRELEASED; urgency=medium
+barbican (2015.1.0-4) unstable; urgency=medium
 
   * Fixes templates so that they don't reference Cinder (Closes: #787702).
+  * Added pt.po debconf templates translations thanks to Américo Monteiro
+    <a_monteiro@gmx.com> (Closes: #788039).
 
  -- Thomas Goirand <zigo@debian.org>  Thu, 11 Jun 2015 23:27:36 +0200
 
