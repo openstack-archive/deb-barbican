@@ -1,3 +1,9 @@
+barbican (2015.1.0-5) unstable; urgency=medium
+
+  * Ran debconf-updatepo (Closes: #788675).
+
+ -- Thomas Goirand <zigo@debian.org>  Sun, 14 Jun 2015 09:23:03 +0000
+
 barbican (2015.1.0-4) unstable; urgency=medium
 
   * Fixes templates so that they don't reference Cinder (Closes: #787702).

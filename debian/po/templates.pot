@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: barbican\n"
 "Report-Msgid-Bugs-To: barbican@packages.debian.org\n"
-"POT-Creation-Date: 2015-06-03 07:23+0000\n"
+"POT-Creation-Date: 2015-06-14 09:23+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -20,15 +20,15 @@ msgstr ""
 #. Type: boolean
 #. Description
 #: ../barbican-common.templates:2001
-msgid "Set up a database for Cinder?"
+msgid "Set up a database for Barbican?"
 msgstr ""
 
 #. Type: boolean
 #. Description
 #: ../barbican-common.templates:2001
 msgid ""
-"No database has been set up for Cinder to use. Before continuing, you should "
-"make sure you have the following information:"
+"No database has been set up for Barbican to use. Before continuing, you "
+"should make sure you have the following information:"
 msgstr ""
 
 #. Type: boolean
