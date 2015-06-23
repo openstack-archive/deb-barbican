@@ -41,8 +41,8 @@ override_dh_install:
 		mv $(CURDIR)/debian/barbican-common/usr/bin/$$i.py $(CURDIR)/debian/barbican-common/usr/bin/$$i ; \
 	done
 	rm $(CURDIR)/debian/barbican-common/usr/bin/barbican.sh
-	for i in barbican-api-paste.ini barbican-api.conf ; do \
-		install -D -m 664 etc/barbican/$$i $(CURDIR)/debian/barbican-common/usr/share/barbican-common/$$i ; \
+	for i in barbican-api-paste.ini barbican-api.conf barbican-admin-paste.ini barbican-functional.conf policy.json vassals/barbican-admin.ini vassals/barbican-api.ini ; do \
+		install -D -m 0664 etc/barbican/$$i $(CURDIR)/debian/barbican-common/usr/share/barbican-common/$$i ; \
 	done
 
 override_dh_sphinxdoc:

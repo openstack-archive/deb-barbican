@@ -17,6 +17,13 @@ if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
 
         pkgos_write_new_conf barbican barbican-api.conf
         pkgos_write_new_conf barbican barbican-api-paste.ini
+	pkgos_write_new_conf barbican barbican-admin-paste.ini
+	pkgos_write_new_conf barbican barbican-functional.conf
+	pkgos_write_new_conf barbican policy.json
+	mkdir -p /etc/barbican/vassals
+	chown barbican:barbican /etc/barbican/vassals
+	pkgos_write_new_conf barbican vassals/barbican-admin.ini
+	pkgos_write_new_conf barbican barbican-api.ini
 
         db_get barbican/configure_db
         if [ "$RET" = "true" ]; then
@@ -24,13 +31,13 @@ if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
         fi
 
         pkgos_rabbit_write_conf ${CONF} DEFAULT barbican
-        pkgos_write_admin_creds ${CINDER_CONF} keystone_authtoken cinder
+        pkgos_write_admin_creds ${API_CONF} filter:keystone_authtoken barbican
 
-       db_get barbican/configure_db
-       if [ "$RET" = "true" ]; then
-               echo "Now calling barbican-db-manage upgrade: this may take a while..."
-               su -s /bin/sh -c 'barbican-db-manage upgrade' barbican
-       fi
+	db_get barbican/configure_db
+	if [ "$RET" = "true" ]; then
+		echo "Now calling barbican-db-manage upgrade: this may take a while..."
+		su -s /bin/sh -c 'barbican-db-manage upgrade' barbican
+	fi
 
 	db_stop
 fi
