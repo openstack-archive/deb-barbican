@@ -26,11 +26,11 @@ if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
         pkgos_rabbit_write_conf ${CONF} DEFAULT barbican
         pkgos_write_admin_creds ${CINDER_CONF} keystone_authtoken cinder
 
-#       db_get barbican/configure_db
-#       if [ "$RET" = "true" ]; then
-#               echo "Now calling barbican-db-manage sync: this may take a while..."
-#               su -s /bin/sh -c 'barbican-db-manage sync' barbican
-#       fi
+       db_get barbican/configure_db
+       if [ "$RET" = "true" ]; then
+               echo "Now calling barbican-db-manage sync: this may take a while..."
+               su -s /bin/sh -c 'barbican-db-manage sync' barbican
+       fi
 
 	db_stop
 fi
