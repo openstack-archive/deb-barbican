@@ -12,6 +12,8 @@ override_dh_auto_build:
 	dh_auto_build -O--buildsystem=python_distutils
 	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func barbican-api.postinst
 	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func barbican-api.config
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func barbican-common.postinst
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func barbican-common.config
 
 override_dh_auto_test:
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
@@ -54,4 +56,4 @@ override_dh_auto_clean:
 	rm -f debian/*.init debian/*.service debian/*.upstart
 	rm -rf build
 	rm -rf barbican.sqlite
-	rm -f debian/barbican-api.postinst debian/barbican-api.config
+	rm -f debian/barbican-api.postinst debian/barbican-api.config debian/barbican-common.postinst debian/barbican-common.config
