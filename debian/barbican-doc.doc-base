@@ -1,0 +1,9 @@
+Document: barbican-doc
+Title: Barbican Documentation
+Author: N/A
+Abstract: Sphinx documentation for Barbican
+Section: Programming/Python
+
+Format: HTML
+Index: /usr/share/doc/barbican-doc/html/index.html
+Files: /usr/share/doc/barbican-doc/html/*

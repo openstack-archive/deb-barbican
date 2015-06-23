@@ -2,6 +2,7 @@ barbican (2015.1.0-6) unstable; urgency=medium
 
   * Finished the debconf automatic keystone authtoken, db, rabbitMQ
     configuration, and API endpoints.
+  * Added debian/barbican-doc.doc-base.
 
  -- Thomas Goirand <zigo@debian.org>  Tue, 23 Jun 2015 14:55:06 +0200
 
