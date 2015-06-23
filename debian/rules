@@ -10,7 +10,8 @@ export OSLO_PACKAGE_VERSION=$(VERSION)
 
 override_dh_auto_build:
 	dh_auto_build -O--buildsystem=python_distutils
-	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func barbican-common.postinst
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func barbican-api.postinst
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func barbican-api.config
 
 override_dh_auto_test:
 ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
@@ -32,12 +33,15 @@ override_dh_auto_install:
 	python setup.py install --root=debian/tmp --install-layout=deb
 
 override_dh_install:
-	dh_install --fail-missing
+	dh_install -O--buildsystem=python_distutils --fail-missing
 	# Restore sanity...
 	for i in barbican-db-manage barbican-keystone-listener barbican-worker ; do \
 		mv $(CURDIR)/debian/barbican-common/usr/bin/$$i.py $(CURDIR)/debian/barbican-common/usr/bin/$$i ; \
 	done
 	rm $(CURDIR)/debian/barbican-common/usr/bin/barbican.sh
+	for i in barbican-api-paste.ini barbican-api.conf ; do \
+		install -D -m 664 etc/barbican/$$i $(CURDIR)/debian/barbican-common/usr/share/barbican-common/$$i ; \
+	done
 
 override_dh_sphinxdoc:
 ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))
@@ -46,7 +50,8 @@ ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))
 endif
 
 override_dh_auto_clean:
-	dh_auto_clean
+	dh_auto_clean -O--buildsystem=python_distutils
 	rm -f debian/*.init debian/*.service debian/*.upstart
 	rm -rf build
 	rm -rf barbican.sqlite
+	rm -f debian/barbican-api.postinst debian/barbican-api.config

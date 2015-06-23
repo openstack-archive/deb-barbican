@@ -1,3 +1,10 @@
+barbican (2015.1.0-5) unstable; urgency=medium
+
+  * Finished the debconf automatic keystone authtoken, db, rabbitMQ
+    configuration, and API endpoints.
+
+ -- Thomas Goirand <zigo@debian.org>  Tue, 23 Jun 2015 14:55:06 +0200
+
 barbican (2015.1.0-4) unstable; urgency=medium
 
   * Fixes templates so that they don't reference Cinder (Closes: #787702).

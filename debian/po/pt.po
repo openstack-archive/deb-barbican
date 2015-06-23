@@ -1,27 +1,28 @@
-# SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
-# This file is distributed under the same license as the PACKAGE package.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# Translation of barbican's debconf messages to european portuguese
+# Copyright (C) 2015 THE barbican'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the barbican package.
 #
-#, fuzzy
+# Américo Monteiro <a_monteiro@gmx.com>, 2015.
 msgid ""
 msgstr ""
-"Project-Id-Version: barbican\n"
+"Project-Id-Version: barbican 2015.1.0-3\n"
 "Report-Msgid-Bugs-To: barbican@packages.debian.org\n"
 "POT-Creation-Date: 2015-06-23 15:25+0200\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: LANGUAGE <LL@li.org>\n"
-"Language: \n"
+"PO-Revision-Date: 2015-06-07 23:50+0100\n"
+"Last-Translator: Américo Monteiro <a_monteiro@gmx.com>\n"
+"Language-Team: Portuguese <traduz@debianpt.org>\n"
+"Language: pt\n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Lokalize 1.4\n"
 
 #. Type: boolean
 #. Description
 #: ../barbican-api.templates:2001
 msgid "Set up a database for Barbican?"
-msgstr ""
+msgstr "Configurar uma base de dados para o Barbican?"
 
 #. Type: boolean
 #. Description
@@ -30,6 +31,8 @@ msgid ""
 "No database has been set up for Barbican to use. Before continuing, you "
 "should make sure you have the following information:"
 msgstr ""
+"Nenhuma base de dados foi configurada para o Barbican usar. Antes de "
+"continuar, você deve certificar-se que tem a seguinte informação:"
 
 #. Type: boolean
 #. Description
@@ -41,6 +44,11 @@ msgid ""
 "   machine);\n"
 " * a username and password to access the database."
 msgstr ""
+" * o tipo de base de dados que deseja usar;\n"
+" * o nome de máquina do servidor da base de dados (esse servidor deve "
+"permitir ligações TCP a partir desta\n"
+"   máquina);\n"
+" * um nome de utilizador e palavra passe para aceder à base de dados."
 
 #. Type: boolean
 #. Description
@@ -49,6 +57,8 @@ msgid ""
 "If some of these requirements are missing, do not choose this option and run "
 "with regular SQLite support."
 msgstr ""
+"Se alguns destes requerimentos estão em falta, não escolha esta opção e "
+"corra com o suporte SQLite regular."
 
 #. Type: boolean
 #. Description
@@ -57,12 +67,14 @@ msgid ""
 "You can change this setting later on by running \"dpkg-reconfigure -plow "
 "barbican-common\"."
 msgstr ""
+"Você pode modificar estas definições mais tarde ao correr \"dpkg-reconfigure "
+"-plow barbican-common\"."
 
 #. Type: string
 #. Description
 #: ../barbican-api.templates:3001
 msgid "Authentication server hostname:"
-msgstr ""
+msgstr "Nome de máquina do servidor de autenticação:"
 
 #. Type: string
 #. Description
@@ -71,6 +83,9 @@ msgid ""
 "Please specify the hostname of the authentication server. Typically this is "
 "also the hostname of the OpenStack Identity Service (Keystone)."
 msgstr ""
+"Por favor especifique o nome de máquina do servidor de autenticação. "
+"Tipicamente este é também o nome de máquina do Serviço de Identidade "
+"OpenStack (Keystone)."
 
 #. Type: string
 #. Description
@@ -83,7 +98,7 @@ msgstr ""
 #. proprietaire ("tenant")
 #: ../barbican-api.templates:4001
 msgid "Authentication server tenant name:"
-msgstr ""
+msgstr "Nome \"tenant\" do servidor de autenticação:"
 
 #. Type: string
 #. Description
@@ -96,37 +111,40 @@ msgstr ""
 #. proprietaire ("tenant")
 #: ../barbican-api.templates:4001
 msgid "Please specify the authentication server tenant name."
-msgstr ""
+msgstr "Por favor especifique o nome \"tenant\" do servidor de autenticação."
 
 #. Type: string
 #. Description
 #: ../barbican-api.templates:5001
 msgid "Authentication server username:"
-msgstr ""
+msgstr "Nome de utilizador do servidor de autenticação:"
 
 #. Type: string
 #. Description
 #: ../barbican-api.templates:5001
 msgid "Please specify the username to use with the authentication server."
 msgstr ""
+"Por favor especifique o nome de utilizador a usar com o servidor de "
+"autenticação."
 
 #. Type: password
 #. Description
 #: ../barbican-api.templates:6001
 msgid "Authentication server password:"
-msgstr ""
+msgstr "Palavra passe do servidor de autenticação:"
 
 #. Type: password
 #. Description
 #: ../barbican-api.templates:6001
 msgid "Please specify the password to use with the authentication server."
 msgstr ""
+"Por favor especifique a palavra passe a usar com o servidor de autenticação."
 
 #. Type: string
 #. Description
 #: ../barbican-api.templates:7001
 msgid "IP address of your RabbitMQ host:"
-msgstr ""
+msgstr "Endereço IP da sua máquina RabbitMQ:"
 
 #. Type: string
 #. Description
@@ -140,36 +158,42 @@ msgid ""
 "In order to interoperate with other components of OpenStack, this package "
 "needs to connect to a central RabbitMQ server."
 msgstr ""
+"De modo a interagir com outros componentes do OpenStack, este pacote precisa "
+"de ligar a um servidor RabbitMQ central."
 
 #. Type: string
 #. Description
 #: ../barbican-api.templates:7001
 msgid "Please specify the IP address of that server."
-msgstr ""
+msgstr "Por favor especifique o endereço IP desse servidor."
 
 #. Type: string
 #. Description
 #: ../barbican-api.templates:8001
 msgid "Username for connection to the RabbitMQ server:"
-msgstr ""
+msgstr "Nome de utilizador para ligação ao servidor RabbitMQ:"
 
 #. Type: string
 #. Description
 #: ../barbican-api.templates:8001
 msgid "Please specify the username used to connect to the RabbitMQ server."
 msgstr ""
+"Por favor especifique o nome de utilizador a usar para ligação ao servidor "
+"RabbitMQ."
 
 #. Type: password
 #. Description
 #: ../barbican-api.templates:9001
 msgid "Password for connection to the RabbitMQ server:"
-msgstr ""
+msgstr "Palavra passe para ligação ao servidor RabbitMQ:"
 
 #. Type: password
 #. Description
 #: ../barbican-api.templates:9001
 msgid "Please specify the password used to connect to the RabbitMQ server."
 msgstr ""
+"Por favor especifique a palavra passe a usar para ligação ao servidor "
+"RabbitMQ."
 
 #. Type: boolean
 #. Description

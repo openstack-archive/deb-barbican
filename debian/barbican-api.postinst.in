@@ -1,0 +1,17 @@
+#!/bin/sh
+
+set -e
+
+#PKGOS-INCLUDE#
+
+if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
+	. /usr/share/debconf/confmodule
+	. /usr/share/dbconfig-common/dpkg/postinst
+
+	pkgos_register_endpoint_postinst barbican barbican key-manager "Barbican Key Management Service" 9311 ""
+	db_stop
+fi
+
+#DEBHELPER#
+
+exit 0
