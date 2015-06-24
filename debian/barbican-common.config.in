@@ -4,7 +4,7 @@ set -e
 
 . /usr/share/debconf/confmodule
 CONF=/etc/barbican/barbican-api.conf
-API_CONF=/etc/barbican/barbican-api-paste.conf
+API_CONF=/etc/barbican/barbican-api-paste.ini
 
 #PKGOS-INCLUDE#
 
