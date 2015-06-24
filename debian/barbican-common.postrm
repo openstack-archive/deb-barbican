@@ -14,6 +14,26 @@ if [ "$1" = "purge" ] ; then
 	echo "Purging barbican. Backup of /var/lib/barbican can be found at /var/lib/barbican.tar.bz2" >&2
 	[ -e /var/lib/barbican ] && rm -rf /var/lib/barbican
 	[ -e /var/log/barbican ] && rm -rf /var/log/barbican
+
+	# Purge the db
+	if [ -f /usr/share/debconf/confmodule ] ; then
+		. /usr/share/debconf/confmodule
+
+		db_get barbican/configure_db || true
+		if [ "$RET" = "true" ]; then
+			if [ -f /usr/share/dbconfig-common/dpkg/postrm ]; then
+				. /usr/share/dbconfig-common/dpkg/postrm
+				dbc_go barbican-common $@
+			else
+				rm -f /etc/dbconfig-common/barbican-common.conf
+				if which ucf >/dev/null 2>&1; then
+					ucf --purge /etc/dbconfig-common/barbican-common.conf
+					ucfr --purge barbican-common /etc/dbconfig-common/barbican-common.conf
+				fi
+			fi
+		fi
+	fi
+
 fi
 
 #DEBHELPER#
