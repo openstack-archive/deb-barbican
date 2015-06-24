@@ -1,2 +1,3 @@
 Make_db-manage_script_use_same_config_file_as_barbican.patch
 fix-barbican-api.conf-as-parsable.patch
+fixes-keystone_authtoken-in-config-file.patch
