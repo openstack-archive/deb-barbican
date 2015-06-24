@@ -3,9 +3,19 @@
 set -e
 
 if [ "$1" = "purge" ] ; then
+	# Purge config files copied in postinst
+	for i in vassals/barbican-admin.ini vassals/barbican-api.ini barbican-admin-paste.ini barbican-api.conf barbican-api-paste.ini barbican-functional.conf policy.json ; do
+		rm -f /etc/barbican/$i
+	done
+	# and the folders
+	rmdir --ignore-fail-on-non-empty /etc/barbican/vassals || true
+	rmdir --ignore-fail-on-non-empty /etc/barbican || true
+
 	echo "Purging barbican. Backup of /var/lib/barbican can be found at /var/lib/barbican.tar.bz2" >&2
 	[ -e /var/lib/barbican ] && rm -rf /var/lib/barbican
 	[ -e /var/log/barbican ] && rm -rf /var/log/barbican
 fi
 
 #DEBHELPER#
+
+exit 0
