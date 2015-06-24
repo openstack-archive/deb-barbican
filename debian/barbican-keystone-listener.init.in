@@ -17,3 +17,4 @@
 DESC="OpenStack Barbican Keystone Event Listener"
 PROJECT_NAME=barbican
 NAME=${PROJECT_NAME}-keystone-listener
+NO_OPENSTACK_CONFIG_FILE_DAEMON_ARG=yes
