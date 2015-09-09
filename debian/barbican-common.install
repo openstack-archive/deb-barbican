@@ -1,1 +1,2 @@
+etc/barbican/barbican.conf	/usr/share/barbican-common
 usr/bin/*

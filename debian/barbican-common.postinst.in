@@ -17,7 +17,7 @@ if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
 
         pkgos_write_new_conf barbican barbican-api.conf
         pkgos_write_new_conf barbican barbican-api-paste.ini
-	pkgos_write_new_conf barbican barbican-admin-paste.ini
+	pkgos_write_new_conf barbican barbican.conf
 	pkgos_write_new_conf barbican barbican-functional.conf
 	pkgos_write_new_conf barbican policy.json
 	mkdir -p /etc/barbican/vassals
