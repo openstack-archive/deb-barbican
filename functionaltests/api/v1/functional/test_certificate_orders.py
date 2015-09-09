@@ -23,7 +23,7 @@ import testtools
 from barbican.plugin.interface import secret_store as s
 from barbican.tasks import certificate_resources as cert_res
 from barbican.tests import certificate_utils as certutil
-from barbican.tests import utils
+from barbican.tests import keys
 from functionaltests.api import base
 from functionaltests.api.v1.behaviors import ca_behaviors
 from functionaltests.api.v1.behaviors import container_behaviors
@@ -106,9 +106,9 @@ def get_private_key_req():
             'payload_content_type': 'application/octet-stream',
             'payload_content_encoding': 'base64',
             'algorithm': 'rsa',
-            'bit_length': 1024,
+            'bit_length': 2048,
             'secret_type': s.SecretType.PRIVATE,
-            'payload': base64.b64encode(utils.get_private_key())}
+            'payload': base64.b64encode(keys.get_private_key_pem())}
 
 
 def get_public_key_req():
@@ -116,9 +116,9 @@ def get_public_key_req():
             'payload_content_type': 'application/octet-stream',
             'payload_content_encoding': 'base64',
             'algorithm': 'rsa',
-            'bit_length': 1024,
+            'bit_length': 2048,
             'secret_type': s.SecretType.PUBLIC,
-            'payload': base64.b64encode(utils.get_public_key())}
+            'payload': base64.b64encode(keys.get_public_key_pem())}
 
 
 create_generic_container_data = {
@@ -157,14 +157,17 @@ class CertificatesTestCase(base.TestCase):
         self.behaviors.delete_all_created_orders()
         super(CertificatesTestCase, self).tearDown()
 
-    def wait_for_order(self, order_ref):
+    def wait_for_order(
+            self, order_ref, delay_before_check_seconds=1, max_wait_seconds=4):
+        time.sleep(delay_before_check_seconds)
+
         # Make sure we have an order in a terminal state
         time_count = 1
         order_resp = self.behaviors.get_order(order_ref)
 
         while ((order_resp.model.status != "ACTIVE") and
                (order_resp.model.status != "ERROR") and
-               time_count <= 4):
+               time_count <= max_wait_seconds):
             time.sleep(1)
             time_count += 1
             order_resp = self.behaviors.get_order(order_ref)
@@ -218,7 +221,7 @@ class CertificatesTestCase(base.TestCase):
                 return ca.model.ca_id
         return None
 
-    def verify_cert_returned(self, order_resp):
+    def verify_cert_returned(self, order_resp, is_stored_key_type=False):
         container_ref = order_resp.model.container_ref
         self.assertIsNotNone(container_ref, "no cert container returned")
 
@@ -230,12 +233,42 @@ class CertificatesTestCase(base.TestCase):
         self.assertIsNotNone(secret_refs, "container has no secret refs")
 
         contains_cert = False
+        contains_private_key_ref = False
+
         for secret in secret_refs:
             if secret.name == 'certificate':
                 contains_cert = True
                 self.assertIsNotNone(secret.secret_ref)
+                self.verify_valid_cert(secret.secret_ref)
+            if secret.name == 'intermediates':
+                self.assertIsNotNone(secret.secret_ref)
+                self.verify_valid_intermediates(secret.secret_ref)
+            if is_stored_key_type:
+                if secret.name == 'private_key':
+                    contains_private_key_ref = True
+                    self.assertIsNotNone(secret.secret_ref)
 
         self.assertTrue(contains_cert)
+        if is_stored_key_type:
+            self.assertTrue(contains_private_key_ref)
+
+    def verify_valid_cert(self, secret_ref):
+        secret_resp = self.secret_behaviors.get_secret(
+            secret_ref,
+            "application/pkix-cert")
+        self.assertIsNotNone(secret_resp)
+        self.assertIsNotNone(secret_resp.content)
+        cert = secret_resp.content
+        crypto.load_certificate(crypto.FILETYPE_PEM, cert)
+
+    def verify_valid_intermediates(self, secret_ref):
+        secret_resp = self.secret_behaviors.get_secret(
+            secret_ref,
+            "application/pkix-cert")
+        self.assertIsNotNone(secret_resp)
+        self.assertIsNotNone(secret_resp.content)
+        cert_chain = secret_resp.content
+        crypto.load_pkcs7_data(crypto.FILETYPE_PEM, cert_chain)
 
     def verify_pending_waiting_for_ca(self, order_resp):
         self.assertEqual('PENDING', order_resp.model.status)
@@ -249,6 +282,7 @@ class CertificatesTestCase(base.TestCase):
         self.assertEqual(message, resp_dict['description'])
 
     @testtools.testcase.attr('positive')
+    @testtools.skipIf(dogtag_imports_ok, "not applicable with dogtag plugin")
     def test_create_simple_cmc_order(self):
         test_model = order_models.OrderModel(**self.simple_cmc_data)
         test_model.meta['request_data'] = base64.b64encode(
@@ -260,6 +294,13 @@ class CertificatesTestCase(base.TestCase):
 
         order_resp = self.behaviors.get_order(order_ref)
         self.verify_pending_waiting_for_ca(order_resp)
+
+        # Wait for retry processing to handle checking for status with the
+        # default certificate plugin (which takes about 10 seconds +- 20%).
+        order_resp = self.wait_for_order(
+            order_ref, delay_before_check_seconds=20, max_wait_seconds=25)
+
+        self.assertEqual('ACTIVE', order_resp.model.status)
 
     @testtools.testcase.attr('positive')
     def test_create_simple_cmc_order_without_requestor_info(self):
@@ -503,7 +544,7 @@ class CertificatesTestCase(base.TestCase):
 
         order_resp = self.wait_for_order(order_ref)
         self.assertEqual('ACTIVE', order_resp.model.status)
-        self.verify_cert_returned(order_resp)
+        self.verify_cert_returned(order_resp, is_stored_key_type=True)
 
     @testtools.testcase.attr('negative')
     def test_create_stored_key_order_with_invalid_container_ref(self):

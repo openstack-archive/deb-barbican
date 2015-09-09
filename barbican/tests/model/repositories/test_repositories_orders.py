@@ -10,8 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from oslo_config import cfg
-
+from barbican.common import config
 from barbican.common import exception
 from barbican.model import models
 from barbican.model import repositories
@@ -34,7 +33,7 @@ class WhenTestingOrderRepository(database_utils.RepositoryTestCase):
 
         self.assertEqual([], entities)
         self.assertEqual(0, offset)
-        self.assertEqual(cfg.CONF.default_limit_paging, limit)
+        self.assertEqual(config.CONF.default_limit_paging, limit)
         self.assertEqual(0, total)
 
     def test_should_raise_no_result_found_with_exceptions(self):
@@ -67,3 +66,57 @@ class WhenTestingOrderRepository(database_utils.RepositoryTestCase):
         )
 
         self.assertEqual(order.id, order_from_get.id)
+
+    def test_should_get_count_zero(self):
+        session = self.repo.get_session()
+
+        project = models.Project()
+        project.external_id = "my keystone id"
+        project.save(session=session)
+
+        session.commit()
+        count = self.repo.get_count(project.id, session=session)
+
+        self.assertEqual(count, 0)
+
+    def test_should_get_count_one(self):
+        session = self.repo.get_session()
+
+        project = models.Project()
+        project.external_id = "my keystone id"
+        project.save(session=session)
+
+        order_model = models.Order()
+        order_model.project_id = project.id
+        self.repo.create_from(order_model, session=session)
+
+        session.commit()
+        count = self.repo.get_count(project.id, session=session)
+
+        self.assertEqual(count, 1)
+
+    def test_should_get_count_one_after_delete(self):
+        session = self.repo.get_session()
+
+        project = models.Project()
+        project.external_id = "my keystone id"
+        project.save(session=session)
+
+        order_model = models.Order()
+        order_model.project_id = project.id
+        self.repo.create_from(order_model, session=session)
+
+        order_model = models.Order()
+        order_model.project_id = project.id
+        self.repo.create_from(order_model, session=session)
+
+        session.commit()
+        count = self.repo.get_count(project.id, session=session)
+        self.assertEqual(count, 2)
+
+        self.repo.delete_entity_by_id(order_model.id, "my keystone id",
+                                      session=session)
+        session.commit()
+
+        count = self.repo.get_count(project.id, session=session)
+        self.assertEqual(count, 1)

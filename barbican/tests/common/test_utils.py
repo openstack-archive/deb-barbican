@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import mock
+import six
 
 from barbican.common import utils
 from barbican.tests import utils as test_utils
@@ -103,18 +104,13 @@ class WhenTestingAcceptEncodingGetter(test_utils.BaseTestCase):
         ae = utils.get_accepted_encodings(self.req)
         self.assertEqual(ae, ['compress', 'base64'])
 
-    def test_get_correct_fullname_for_class(self):
-        test_class = self.req
-        fullname = utils.generate_fullname_for(test_class)
-        self.assertEqual("mock.Mock", fullname)
-
 
 class WhenTestingGenerateFullClassnameForInstance(test_utils.BaseTestCase):
 
     def setUp(self):
         super(WhenTestingGenerateFullClassnameForInstance, self).setUp()
 
-        self.instance = mock.Mock()
+        self.instance = test_utils.DummyClassForTesting()
 
     def test_get_fullname_for_null_instance_raises_exception(self):
         self.assertRaises(ValueError, utils.generate_fullname_for, None)
@@ -123,13 +119,14 @@ class WhenTestingGenerateFullClassnameForInstance(test_utils.BaseTestCase):
         test_string = "foo"
         fullname = utils.generate_fullname_for(test_string)
         self.assertEqual(0, fullname.count("."))
-        self.assertNotIn("__builtin__", fullname)
+        self.assertNotIn(six.moves.builtins.__name__, fullname)
 
     def test_returns_class_name_on_null_module(self):
         self.instance.__class__.__module__ = None
         name = utils.generate_fullname_for(self.instance)
-        self.assertEqual('Mock', name)
+        self.assertEqual('DummyClassForTesting', name)
 
     def test_returns_qualified_name(self):
+        self.instance.__class__.__module__ = 'dummy'
         name = utils.generate_fullname_for(self.instance)
-        self.assertEqual('mock.Mock', name)
+        self.assertEqual('dummy.DummyClassForTesting', name)

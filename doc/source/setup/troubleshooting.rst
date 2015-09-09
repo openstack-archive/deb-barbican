@@ -79,7 +79,7 @@ endpoint's host name (typically the load balancer's DNS name and port).
 How to avoid
 ^^^^^^^^^^^^^
 
-Change your ``barbican-api.conf`` file's ``host_href`` setting from
+Change your ``barbican.conf`` file's ``host_href`` setting from
 ``localhost:9311`` to the correct host name (myhostname.com in the example
 above).
 
@@ -125,6 +125,22 @@ asked if you want to install the command line tools. Now
 tests should run.
 
 
+Barbican's tox tests fail with "ImportError: No module named _bsddb"
+-------------------------------------------------
+
+What you might see
+^^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+    ImportError: No module named _bsddb
+
+How to avoid
+^^^^^^^^^^^^
+
+Running tests via tox (which uses testr) will create a .testrepository directory containing, among other things, data files.  Those datafiles may be created with bsddb, if it is available in the environment. This can cause problems if you run in an environment that does not have bsddb.  To resolve this, delete your .testrepository directory and run tox again.
+
+
 uWSGI logs 'OOPS ! failed loading app'
 --------------------------------------
 
@@ -137,7 +153,6 @@ What you might see
     spawned uWSGI master process (pid: 59190)
     spawned uWSGI worker 1 (pid: 59191, cores: 1)
     spawned uWSGI worker 1 (pid: 59192, cores: 1)
-    Loading paste environment: config:/etc/barbican/barbican-admin-paste.ini
     Loading paste environment: config:/etc/barbican/barbican-api-paste.ini
     WSGI app 0 (mountpoint='') ready in 0 seconds on interpreter \
         0x7fd098c08520 pid: 59191 (default app)
@@ -160,7 +175,7 @@ The vassal (worker) processes are not able to access the datastore.
 How to avoid
 ^^^^^^^^^^^^
 
-Check the ``sql_connection`` in your ``barbican-api.conf`` file, to make sure
+Check the ``sql_connection`` in your ``barbican.conf`` file, to make sure
 that it references a valid reachable database.
 
 
@@ -327,7 +342,6 @@ What you might see
 
     *** has_emperor mode detected (fd: 6) ***
     ...
-    [uWSGI] getting INI configuration from barbican-admin.ini
     !!! UNABLE to load uWSGI plugin: dlopen(./python_plugin.so, 10): image not \
     found !!!
     ...
@@ -337,7 +351,6 @@ What you might see
     2015, in load
       entry = __import__(self.module_name, globals(),globals(), ['__name__'])
     ImportError: No module named barbican.api.app
-    [emperor] removed uwsgi instance barbican-admin.ini
     ...
     *** Starting uWSGI 1.9.13 (64bit) on [Fri Jul  5 09:59:29 2013] ***
 

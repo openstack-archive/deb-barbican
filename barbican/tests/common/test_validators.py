@@ -22,6 +22,7 @@ import testtools
 from barbican.common import exception as excep
 from barbican.common import validators
 from barbican.tests import certificate_utils as certs
+from barbican.tests import keys
 from barbican.tests import utils
 
 VALID_EXTENSIONS = "valid extensions"
@@ -43,9 +44,9 @@ def get_private_key_req():
             'payload_content_type': 'application/pkcs8',
             'payload_content_encoding': 'base64',
             'algorithm': 'rsa',
-            'bit_length': 1024,
+            'bit_length': 2048,
             'secret_type': 'private',
-            'payload': base64.b64encode(utils.get_private_key())}
+            'payload': base64.b64encode(keys.get_private_key_pem())}
 
 
 def get_public_key_req():
@@ -53,9 +54,9 @@ def get_public_key_req():
             'payload_content_type': 'application/octet-stream',
             'payload_content_encoding': 'base64',
             'algorithm': 'rsa',
-            'bit_length': 1024,
+            'bit_length': 2048,
             'secret_type': 'public',
-            'payload': base64.b64encode(utils.get_public_key())}
+            'payload': base64.b64encode(keys.get_public_key_pem())}
 
 
 def get_certificate_req():
@@ -63,9 +64,9 @@ def get_certificate_req():
             'payload_content_type': 'application/pkix-cert',
             'payload_content_encoding': 'base64',
             'algorithm': 'rsa',
-            'bit_length': 1024,
+            'bit_length': 2048,
             'secret_type': 'certificate',
-            'payload': base64.b64encode(utils.get_certificate())}
+            'payload': base64.b64encode(keys.get_certificate_pem())}
 
 
 def get_passphrase_req():
@@ -227,6 +228,7 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
             self.secret_req,
         )
         self.assertEqual('bit_length', exception.invalid_property)
+        self.assertIn('bit_length', exception.message)
 
     def test_should_raise_non_integer_bit_length(self):
         self.secret_req['bit_length'] = "23"
@@ -237,6 +239,7 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
             self.secret_req,
         )
         self.assertEqual('bit_length', exception.invalid_property)
+        self.assertIn('bit_length', exception.message)
 
     def test_validation_should_raise_with_empty_payload(self):
         self.secret_req['payload'] = '   '
@@ -247,6 +250,7 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
             self.secret_req,
         )
         self.assertEqual('payload', exception.invalid_property)
+        self.assertIn('payload', exception.message)
 
     def test_should_raise_already_expired(self):
         self.secret_req['expiration'] = '2004-02-28T19:14:44.180394'
@@ -257,6 +261,7 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
             self.secret_req,
         )
         self.assertEqual('expiration', exception.invalid_property)
+        self.assertIn('expiration', exception.message)
 
     def test_should_raise_expiration_nonsense(self):
         self.secret_req['expiration'] = 'nonsense'
@@ -267,6 +272,7 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
             self.secret_req,
         )
         self.assertEqual('expiration', exception.invalid_property)
+        self.assertIn('expiration', exception.message)
 
     def test_should_raise_all_nulls(self):
         self.secret_req = {'name': None,
@@ -375,7 +381,19 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
     def test_validation_should_raise_with_bad_base64_payload(self):
         self.secret_req['payload_content_type'] = 'application/octet-stream'
         self.secret_req['payload_content_encoding'] = 'base64'
-        self.secret_req['payload'] = '\u0080'
+        self.secret_req['payload'] = 'bad base 64'
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.secret_req,
+        )
+        self.assertEqual('payload', exception.invalid_property)
+
+    def test_validation_should_raise_with_unicode_payload(self):
+        self.secret_req['payload_content_type'] = 'application/octet-stream'
+        self.secret_req['payload_content_encoding'] = 'base64'
+        self.secret_req['payload'] = unichr(0x0080)
 
         exception = self.assertRaises(
             excep.InvalidObject,
@@ -1019,7 +1037,6 @@ class WhenTestingKeyTypeOrderValidator(utils.BaseTestCase):
                                       self.key_order_req)
         self.assertEqual('expiration', exception.invalid_property)
 
-    @testtools.skip("due to bug#1365131")
     def test_should_not_raise_correct_hmac_order_refs(self):
         self.key_order_req['meta']['algorithm'] = 'hmacsha1'
         del self.key_order_req['meta']['mode']
@@ -1278,13 +1295,19 @@ class WhenTestingStoredKeyOrderValidator(utils.BaseTestCase):
                           self.validator.validate,
                           self.order_req)
 
-    def test_should_pass_with_two_cn_in_dn(self):
-        self.meta['subject_dn'] = "CN=example1 CN=example2"
+    def test_should_pass_with_one_cn_in_dn(self):
+        self.meta['subject_dn'] = "CN=example1"
         self.validator.validate(self.order_req)
 
-    def test_should_pass_with_blank_dn(self):
-        self.meta['subject_dn'] = ""
+    def test_should_pass_with_two_cn_in_dn(self):
+        self.meta['subject_dn'] = "CN=example1,CN=example2"
         self.validator.validate(self.order_req)
+
+    def test_should_raise_with_blank_dn(self):
+        self.meta['subject_dn'] = ""
+        self.assertRaises(excep.InvalidSubjectDN,
+                          self.validator.validate,
+                          self.order_req)
 
     def test_should_raise_with_bad_subject_dn(self):
         self.meta['subject_dn'] = "Bad subject DN data"
@@ -1297,6 +1320,77 @@ class WhenTestingStoredKeyOrderValidator(utils.BaseTestCase):
         self.assertRaises(excep.InvalidObject,
                           self.validator.validate,
                           self.order_req)
+
+
+@utils.parameterized_test_case
+class WhenTestingAclValidator(utils.BaseTestCase):
+    def setUp(self):
+        super(WhenTestingAclValidator, self).setUp()
+        self.validator = validators.ACLValidator()
+
+    @utils.parameterized_dataset({
+        'one_reader': [{'read': {'users': ['reader'],
+                                 'project-access': True}}],
+        'two_reader': [{'read': {'users': ['r1', 'r2'],
+                                 'project-access': True}}],
+        'private': [{'read': {'users': [], 'project-access': False}}],
+        'default_users': [{'read': {'project-access': False}}],
+        'default_creator': [{'read': {'users': ['reader']}}],
+        'almost_empty': [{'read': {}}],
+        'empty': [{}],
+    })
+    def test_should_validate(self, acl_req):
+        self.validator.validate(acl_req)
+
+    @utils.parameterized_dataset({
+        'foo': ['foo'],
+        'bad_op': [{'bad_op': {'users': ['reader'], 'project-access': True}}],
+        'bad_field': [{'read': {'bad_field': ['reader'],
+                                'project-access': True}}],
+        'bad_user': [{'read': {'users': [27], 'project-access': True}}],
+        'missing_op': [{'project-access': False}],
+    })
+    def test_should_raise(self, acl_req):
+        self.assertRaises(excep.InvalidObject,
+                          self.validator.validate,
+                          acl_req)
+
+    @utils.parameterized_dataset({
+        'write': [{'write': {'users': ['writer'], 'project-access': True}}],
+        'list': [{'list': {'users': ['lister'], 'project-access': True}}],
+        'delete': [{'delete': {'users': ['deleter'], 'project-access': True}}],
+    })
+    def test_should_raise_future(self, acl_req):
+        self.assertRaises(excep.InvalidObject,
+                          self.validator.validate,
+                          acl_req)
+
+
+class WhenTestingProjectQuotasValidator(utils.BaseTestCase):
+    def setUp(self):
+        super(WhenTestingProjectQuotasValidator, self).setUp()
+        self.good_project_quotas = {"project_quotas":
+                                    {"secrets": 50,
+                                     "orders": 10,
+                                     "containers": 20}}
+        self.bad_project_quotas = {"bad key": "bad value"}
+        self.validator = validators.ProjectQuotaValidator()
+
+    def test_should_pass_good_data(self):
+        self.validator.validate(self.good_project_quotas)
+
+    def test_should_pass_empty_properties(self):
+        self.validator.validate({"project_quotas": {}})
+
+    def test_should_raise_bad_data(self):
+        self.assertRaises(excep.InvalidObject,
+                          self.validator.validate,
+                          self.bad_project_quotas)
+
+    def test_should_raise_empty_dict(self):
+        self.assertRaises(excep.InvalidObject,
+                          self.validator.validate,
+                          {})
 
 
 if __name__ == '__main__':

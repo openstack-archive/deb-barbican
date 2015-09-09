@@ -15,6 +15,7 @@ import pecan
 from barbican import api
 from barbican.api import controllers
 from barbican.common import hrefs
+from barbican.common import quota
 from barbican.common import resources as res
 from barbican.common import utils
 from barbican.common import validators
@@ -90,6 +91,11 @@ class OrderController(controllers.ACLMixin):
         project = res.get_or_create_project(external_project_id)
         order_type = body.get('type')
 
+        request_id = None
+        ctxt = controllers._get_barbican_context(pecan.request)
+        if ctxt and ctxt.request_id:
+            request_id = ctxt.request_id
+
         if self.order.type != order_type:
             order_cannot_modify_order_type()
 
@@ -106,7 +112,8 @@ class OrderController(controllers.ACLMixin):
         # entity.
         self.queue.update_order(order_id=self.order.id,
                                 project_id=external_project_id,
-                                updated_meta=updated_meta)
+                                updated_meta=updated_meta,
+                                request_id=request_id)
 
     @index.when(method='DELETE')
     @utils.allow_all_content_types
@@ -127,6 +134,7 @@ class OrdersController(controllers.ACLMixin):
         self.order_repo = repo.get_order_repository()
         self.queue = queue_resource or async_client.TaskClient()
         self.type_order_validator = validators.TypeOrderValidator()
+        self.quota_enforcer = quota.QuotaEnforcer('orders', self.order_repo)
 
     @pecan.expose()
     def _lookup(self, order_id, *remainder):
@@ -158,7 +166,8 @@ class OrdersController(controllers.ACLMixin):
 
         result = self.order_repo.get_by_create_date(
             external_project_id, offset_arg=kw.get('offset', 0),
-            limit_arg=kw.get('limit', None), suppress_exception=True)
+            limit_arg=kw.get('limit', None), meta_arg=kw.get('meta', None),
+            suppress_exception=True)
         orders, offset, limit, total = result
 
         if not orders:
@@ -187,7 +196,6 @@ class OrdersController(controllers.ACLMixin):
     @controllers.enforce_rbac('orders:post')
     @controllers.enforce_content_types(['application/json'])
     def on_post(self, external_project_id, **kwargs):
-
         project = res.get_or_create_project(external_project_id)
 
         body = api.load_body(pecan.request,
@@ -206,16 +214,20 @@ class OrdersController(controllers.ACLMixin):
                 container_ref = order_meta.get('container_ref')
                 validators.validate_stored_key_rsa_container(
                     external_project_id,
-                    container_ref)
+                    container_ref, pecan.request)
+
+        self.quota_enforcer.enforce(project)
 
         new_order = models.Order()
         new_order.meta = body.get('meta')
         new_order.type = order_type
         new_order.project_id = project.id
 
+        request_id = None
         ctxt = controllers._get_barbican_context(pecan.request)
         if ctxt:
             new_order.creator_id = ctxt.user
+            request_id = ctxt.request_id
 
         self.order_repo.create_from(new_order)
 
@@ -226,7 +238,8 @@ class OrdersController(controllers.ACLMixin):
         repo.commit()
 
         self.queue.process_type_order(order_id=order_id,
-                                      project_id=external_project_id)
+                                      project_id=external_project_id,
+                                      request_id=request_id)
 
         url = hrefs.convert_order_to_href(order_id)
 

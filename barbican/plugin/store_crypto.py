@@ -13,8 +13,7 @@
 
 import base64
 
-from oslo_config import cfg
-
+from barbican.common import config
 from barbican.common import utils
 from barbican.model import models
 from barbican.model import repositories
@@ -22,7 +21,8 @@ from barbican.plugin.crypto import crypto
 from barbican.plugin.crypto import manager
 from barbican.plugin.interface import secret_store as sstore
 
-CONF = cfg.CONF
+CONF = config.new_config()
+config.parse_args(CONF)
 
 
 class StoreCryptoContext(object):
@@ -302,19 +302,13 @@ def _store_secret_and_datum(
 
     # Create Secret entities in data store.
     if not secret_model.id:
+        secret_model.project_id = context.project_model.id
         repositories.get_secret_repository().create_from(secret_model)
-        new_assoc = models.ProjectSecret()
-        new_assoc.project_id = context.project_model.id
-        new_assoc.secret_id = secret_model.id
-        new_assoc.role = "admin"
-        new_assoc.status = models.States.ACTIVE
-        repositories.get_project_secret_repository().create_from(new_assoc)
 
     # setup and store encrypted datum
     datum_model = models.EncryptedDatum(secret_model, kek_datum_model)
     datum_model.content_type = context.content_type
-    datum_model.cypher_text = (
-        base64.b64encode(generated_dto.cypher_text))
+    datum_model.cypher_text = base64.b64encode(generated_dto.cypher_text)
     datum_model.kek_meta_extended = generated_dto.kek_meta_extended
     datum_model.secret_id = secret_model.id
     repositories.get_encrypted_datum_repository().create_from(

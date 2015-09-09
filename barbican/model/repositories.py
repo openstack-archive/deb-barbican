@@ -24,19 +24,18 @@ import logging
 import time
 import uuid
 
-from oslo_config import cfg
-from oslo_log import log
+from oslo_utils import timeutils
 import sqlalchemy
 from sqlalchemy import func as sa_func
 from sqlalchemy import or_
 import sqlalchemy.orm as sa_orm
 
+from barbican.common import config
 from barbican.common import exception
 from barbican.common import utils
 from barbican import i18n as u
 from barbican.model.migration import commands
 from barbican.model import models
-from barbican.openstack.common import timeutils
 
 LOG = utils.getLogger(__name__)
 
@@ -62,25 +61,14 @@ _ORDER_RETRY_TASK_REPOSITORY = None
 _PREFERRED_CA_REPOSITORY = None
 _PROJECT_REPOSITORY = None
 _PROJECT_CA_REPOSITORY = None
-_PROJECT_SECRET_REPOSITORY = None
+_PROJECT_QUOTAS_REPOSITORY = None
 _SECRET_ACL_REPOSITORY = None
 _SECRET_META_REPOSITORY = None
 _SECRET_REPOSITORY = None
 _TRANSPORT_KEY_REPOSITORY = None
 
-db_opts = [
-    cfg.IntOpt('sql_idle_timeout', default=3600),
-    cfg.IntOpt('sql_max_retries', default=60),
-    cfg.IntOpt('sql_retry_interval', default=1),
-    cfg.BoolOpt('db_auto_create', default=True),
-    cfg.StrOpt('sql_connection'),
-    cfg.IntOpt('max_limit_paging', default=100),
-    cfg.IntOpt('default_limit_paging', default=10),
-]
 
-CONF = cfg.CONF
-CONF.register_opts(db_opts)
-log.register_options(CONF)
+CONF = config.CONF
 
 
 def hard_reset():
@@ -102,9 +90,12 @@ def setup_database_engine_and_factory():
 
     LOG.info('Setting up database engine and session factory')
     LOG.debug('Sql connection = %s', CONF.sql_connection)
-    sa_logger = logging.getLogger('sqlalchemy.engine')
     if CONF.debug:
+        sa_logger = logging.getLogger('sqlalchemy.engine')
         sa_logger.setLevel(logging.DEBUG)
+    if CONF.sql_pool_logging:
+        pool_logger = logging.getLogger('sqlalchemy.pool')
+        pool_logger.setLevel(logging.DEBUG)
 
     _ENGINE = _get_engine(_ENGINE)
 
@@ -176,6 +167,13 @@ def _get_engine(engine):
             'pool_recycle': CONF.sql_idle_timeout,
             'echo': False,
             'convert_unicode': True}
+        if CONF.sql_pool_class:
+            engine_args['poolclass'] = utils.get_class_for(
+                'sqlalchemy.pool', CONF.sql_pool_class)
+        if CONF.sql_pool_size:
+            engine_args['pool_size'] = CONF.sql_pool_size
+        if CONF.sql_pool_max_overflow:
+            engine_args['max_overflow'] = CONF.sql_pool_max_overflow
 
         try:
             engine = _create_engine(connection, **engine_args)
@@ -232,7 +230,7 @@ def _auto_generate_tables(engine, tables):
     else:
         # Create database tables from our models.
         LOG.info(u._LI('Auto-creating barbican registry DB'))
-        models.register_models(engine)
+        models.BASE.metadata.create_all(engine)
 
         # Sync the alembic version 'head' with current models.
         commands.stamp()
@@ -263,7 +261,7 @@ def wrap_db_error(f):
                     raise
         except sqlalchemy.exc.DBAPIError:
             raise
-    _wrap.func_name = f.func_name
+    _wrap.__name__ = f.__name__
     return _wrap
 
 
@@ -314,9 +312,6 @@ def delete_all_project_resources(project_id):
         project_id, suppress_exception=False, session=session)
     kek_repo = get_kek_datum_repository()
     kek_repo.delete_project_entities(
-        project_id, suppress_exception=False, session=session)
-    project_secret_repo = get_project_secret_repository()
-    project_secret_repo.delete_project_entities(
         project_id, suppress_exception=False, session=session)
     project_repo = get_project_repository()
     project_repo.delete_project_entities(
@@ -499,6 +494,24 @@ class BaseRepo(object):
         else:
             return []
 
+    def get_count(self, project_id, session=None):
+        """Gets count of entities associated with a given project
+
+        :param project_id: id of barbican project entity
+        :param session: existing db session reference. If None, gets session.
+        :return: an number 0 or greater
+
+        Sub-class should implement `_build_get_project_entities_query` function
+        to delete related entities otherwise it would raise NotImplementedError
+        on its usage.
+        """
+        session = self.get_session(session)
+        query = self._build_get_project_entities_query(project_id, session)
+        if query:
+            return query.count()
+        else:
+            return 0
+
     def delete_project_entities(self, project_id,
                                 suppress_exception=False,
                                 session=None):
@@ -594,7 +607,6 @@ class SecretRepo(BaseRepo):
         utcnow = timeutils.utcnow()
 
         query = session.query(models.Secret)
-        query = query.order_by(models.Secret.created_at)
         query = query.filter_by(deleted=False)
 
         # Note(john-wood-w): SQLAlchemy requires '== None' below,
@@ -613,19 +625,19 @@ class SecretRepo(BaseRepo):
         if secret_type:
             query = query.filter(models.Secret.secret_type == secret_type)
 
-        query = query.join(models.ProjectSecret,
-                           models.Secret.project_assocs)
-        query = query.join(models.Project, models.ProjectSecret.projects)
+        query = query.join(models.Project)
         query = query.filter(models.Project.external_id == external_project_id)
 
-        start = offset
-        end = offset + limit
-        LOG.debug('Retrieving from %s to %s', start, end)
         total = query.count()
-        entities = query[start:end]
+        end_offset = offset + limit
+
+        LOG.debug('Retrieving from %s to %s', offset, end_offset)
+
+        query = query.limit(limit).offset(offset)
+        entities = query.all()
+
         LOG.debug('Number entities retrieved: %s out of %s',
-                  len(entities), total
-                  )
+                  len(entities), total)
 
         if total <= 0 and not suppress_exception:
             _raise_no_entities_found(self._do_entity_name())
@@ -642,17 +654,14 @@ class SecretRepo(BaseRepo):
 
         # Note(john-wood-w): SQLAlchemy requires '== None' below,
         #   not 'is None'.
-        # TODO(jfwood): Performance? Is the many-to-many join needed?
         expiration_filter = or_(models.Secret.expiration == None,
                                 models.Secret.expiration > utcnow)
 
         query = session.query(models.Secret)
         query = query.filter_by(id=entity_id, deleted=False)
         query = query.filter(expiration_filter)
-        query = query.join(models.ProjectSecret, models.Secret.project_assocs)
-        query = query.join(models.Project, models.ProjectSecret.projects)
+        query = query.join(models.Project)
         query = query.filter(models.Project.external_id == external_project_id)
-
         return query
 
     def _do_validate(self, values):
@@ -662,14 +671,12 @@ class SecretRepo(BaseRepo):
     def _build_get_project_entities_query(self, project_id, session):
         """Builds query for retrieving Secrets associated with a given project
 
-        Discovery is done via a ProjectSecret association.
-
         :param project_id: id of barbican project entity
         :param session: existing db session reference.
         """
         query = session.query(models.Secret).filter_by(deleted=False)
-        query = query.join(models.ProjectSecret, models.Secret.project_assocs)
-        query = query.filter(models.ProjectSecret.project_id == project_id)
+        query = query.filter(models.Secret.project_id == project_id)
+
         return query
 
     def get_secret_by_id(self, entity_id, suppress_exception=False,
@@ -839,37 +846,12 @@ class KEKDatumRepo(BaseRepo):
             project_id=project_id).filter_by(deleted=False)
 
 
-class ProjectSecretRepo(BaseRepo):
-    """Repository for the ProjectSecret entity."""
-
-    def _do_entity_name(self):
-        """Sub-class hook: return entity name, such as for debugging."""
-        return "ProjectSecret"
-
-    def _do_build_get_query(self, entity_id, external_project_id, session):
-        """Sub-class hook: build a retrieve query."""
-        return session.query(models.ProjectSecret).filter_by(id=entity_id)
-
-    def _do_validate(self, values):
-        """Sub-class hook: validate values."""
-        pass
-
-    def _build_get_project_entities_query(self, project_id, session):
-        """Builds query for retrieving ProjectSecret related to given project.
-
-        :param project_id: id of barbican project entity
-        :param session: existing db session reference.
-        """
-        return session.query(models.ProjectSecret).filter_by(
-            project_id=project_id).filter_by(deleted=False)
-
-
 class OrderRepo(BaseRepo):
     """Repository for the Order entity."""
 
     def get_by_create_date(self, external_project_id, offset_arg=None,
-                           limit_arg=None, suppress_exception=False,
-                           session=None):
+                           limit_arg=None, meta_arg=None,
+                           suppress_exception=False, session=None):
         """Returns a list of orders
 
         The list is ordered by the date they were created at and paged
@@ -879,6 +861,7 @@ class OrderRepo(BaseRepo):
         :param offset_arg: The entity number where the query result should
                            start.
         :param limit_arg: The maximum amount of entities in the result set.
+        :param meta_arg: Optional meta field used to filter results.
         :param suppress_exception: Whether NoResultFound exceptions should be
                                    suppressed.
         :param session: SQLAlchemy session object.
@@ -893,6 +876,10 @@ class OrderRepo(BaseRepo):
         query = session.query(models.Order)
         query = query.order_by(models.Order.created_at)
         query = query.filter_by(deleted=False)
+
+        if meta_arg:
+            query = query.filter(models.Order.meta.contains(meta_arg))
+
         query = query.join(models.Project, models.Order.project)
         query = query.filter(models.Project.external_id == external_project_id)
 
@@ -900,7 +887,7 @@ class OrderRepo(BaseRepo):
         end = offset + limit
         LOG.debug('Retrieving from %s to %s', start, end)
         total = query.count()
-        entities = query[start:end]
+        entities = query.offset(start).limit(limit).all()
         LOG.debug('Number entities retrieved: %s out of %s',
                   len(entities), total
                   )
@@ -1082,7 +1069,7 @@ class OrderRetryTaskRepo(BaseRepo):
         end = offset + limit
         LOG.debug('Retrieving from %s to %s', start, end)
         total = query.count()
-        entities = query[start:end]
+        entities = query.offset(start).limit(limit).all()
         LOG.debug('Number entities retrieved: %s out of %s',
                   len(entities), total
                   )
@@ -1111,8 +1098,8 @@ class ContainerRepo(BaseRepo):
     """Repository for the Container entity."""
 
     def get_by_create_date(self, external_project_id, offset_arg=None,
-                           limit_arg=None, suppress_exception=False,
-                           session=None):
+                           limit_arg=None, name_arg=None,
+                           suppress_exception=False, session=None):
         """Returns a list of containers
 
         The list is ordered by the date they were created at and paged
@@ -1127,6 +1114,10 @@ class ContainerRepo(BaseRepo):
         query = session.query(models.Container)
         query = query.order_by(models.Container.created_at)
         query = query.filter_by(deleted=False)
+
+        if name_arg:
+            query = query.filter(models.Container.name.like(name_arg))
+
         query = query.join(models.Project, models.Container.project)
         query = query.filter(models.Project.external_id == external_project_id)
 
@@ -1134,7 +1125,7 @@ class ContainerRepo(BaseRepo):
         end = offset + limit
         LOG.debug('Retrieving from %s to %s', start, end)
         total = query.count()
-        entities = query[start:end]
+        entities = query.offset(start).limit(limit).all()
         LOG.debug('Number entities retrieved: %s out of %s',
                   len(entities), total
                   )
@@ -1232,7 +1223,7 @@ class ContainerConsumerRepo(BaseRepo):
         end = offset + limit
         LOG.debug('Retrieving from %s to %s', start, end)
         total = query.count()
-        entities = query[start:end]
+        entities = query.offset(start).limit(limit).all()
         LOG.debug('Number entities retrieved: %s out of %s',
                   len(entities), total
                   )
@@ -1299,6 +1290,19 @@ class ContainerConsumerRepo(BaseRepo):
         """Sub-class hook: validate values."""
         pass
 
+    def _build_get_project_entities_query(self, project_id, session):
+        """Builds query for retrieving consumers associated with given project
+
+        :param project_id: id of barbican project entity
+        :param session: existing db session reference.
+        """
+        query = session.query(
+            models.ContainerConsumerMetadatum).filter_by(deleted=False)
+        query = query.filter(
+            models.ContainerConsumerMetadatum.project_id == project_id)
+
+        return query
+
 
 class TransportKeyRepo(BaseRepo):
     """Repository for the TransportKey entity
@@ -1336,7 +1340,7 @@ class TransportKeyRepo(BaseRepo):
         end = offset + limit
         LOG.debug('Retrieving from %s to %s', start, end)
         total = query.count()
-        entities = query[start:end]
+        entities = query.offset(start).limit(limit).all()
         LOG.debug('Number of entities retrieved: %s out of %s',
                   len(entities), total)
 
@@ -1402,7 +1406,7 @@ class CertificateAuthorityRepo(BaseRepo):
         end = offset + limit
         LOG.debug('Retrieving from %s to %s', start, end)
         total = query.count()
-        entities = query[start:end]
+        entities = query.offset(start).limit(limit).all()
         LOG.debug('Number entities retrieved: %s out of %s',
                   len(entities), total
                   )
@@ -1556,7 +1560,7 @@ class ProjectCertificateAuthorityRepo(BaseRepo):
         end = offset + limit
         LOG.debug('Retrieving from %s to %s', start, end)
         total = query.count()
-        entities = query[start:end]
+        entities = query.offset(start).limit(limit).all()
         LOG.debug('Number entities retrieved: %s out of %s',
                   len(entities), total
                   )
@@ -1623,7 +1627,7 @@ class PreferredCertificateAuthorityRepo(BaseRepo):
         end = offset + limit
         LOG.debug('Retrieving from %s to %s', start, end)
         total = query.count()
-        entities = query[start:end]
+        entities = query.offset(start).limit(limit).all()
         LOG.debug('Number entities retrieved: %s out of %s',
                   len(entities), total
                   )
@@ -1712,6 +1716,7 @@ class SecretACLRepo(BaseRepo):
                                session=None):
         session = self.get_session(session)
         secret.updated_at = timeutils.utcnow()
+        secret_acl.updated_at = timeutils.utcnow()
         secret.secret_acls.append(secret_acl)
         secret.save(session=session)
 
@@ -1806,7 +1811,7 @@ class ContainerACLRepo(BaseRepo):
                                user_ids=None, session=None):
         session = self.get_session(session)
         container.updated_at = timeutils.utcnow()
-
+        container_acl.updated_at = timeutils.utcnow()
         container.container_acls.append(container_acl)
         container.save(session=session)
 
@@ -1861,6 +1866,130 @@ class ContainerACLRepo(BaseRepo):
 
         for entity in container.container_acls:
             entity.delete(session=session)
+
+
+class ProjectQuotasRepo(BaseRepo):
+    """Repository for the ProjectQuotas entity."""
+    def _do_entity_name(self):
+        """Sub-class hook: return entity name, such as for debugging."""
+        return "ProjectQuotas"
+
+    def _do_build_get_query(self, entity_id, external_project_id, session):
+        """Sub-class hook: build a retrieve query."""
+        return session.query(models.ProjectQuotas).filter_by(id=entity_id)
+
+    def _do_validate(self, values):
+        """Sub-class hook: validate values."""
+        pass
+
+    def get_by_create_date(self, offset_arg=None, limit_arg=None,
+                           suppress_exception=False, session=None):
+        """Returns a list of ProjectQuotas
+
+        The list is ordered by the date they were created at and paged
+        based on the offset and limit fields.
+
+        :param offset_arg: The entity number where the query result should
+                           start.
+        :param limit_arg: The maximum amount of entities in the result set.
+        :param suppress_exception: Whether NoResultFound exceptions should be
+                                   suppressed.
+        :param session: SQLAlchemy session object.
+        :raises NotFound: if no quota config is found for the project
+        :returns: Tuple consisting of (list_of_entities, offset, limit, total).
+        """
+
+        offset, limit = clean_paging_values(offset_arg, limit_arg)
+
+        session = self.get_session(session)
+
+        query = session.query(models.ProjectQuotas)
+        query = query.order_by(models.ProjectQuotas.created_at)
+        query = query.join(models.Project, models.ProjectQuotas.project)
+
+        start = offset
+        end = offset + limit
+        LOG.debug('Retrieving from %s to %s', start, end)
+        total = query.count()
+        entities = query.offset(start).limit(limit).all()
+        LOG.debug('Number entities retrieved: %s out of %s',
+                  len(entities), total)
+
+        if total <= 0 and not suppress_exception:
+            _raise_no_entities_found(self._do_entity_name())
+
+        return entities, offset, limit, total
+
+    def create_or_update_by_project_id(self, project_id,
+                                       parsed_project_quotas,
+                                       session=None):
+        """Create or update Project Quotas config for a project by project_id.
+
+        :param project_id: ID of project whose quota config will be saved
+        :param parsed_project_quotas: Python dict with quota definition
+        :param session: SQLAlchemy session object.
+        :return: None
+        """
+        session = self.get_session(session)
+        query = session.query(models.ProjectQuotas)
+        query = query.filter_by(project_id=project_id)
+        try:
+            entity = query.one()
+        except sa_orm.exc.NoResultFound:
+            self.create_from(
+                models.ProjectQuotas(project_id,
+                                     parsed_project_quotas),
+                session=session)
+        else:
+            self._update_values(entity, parsed_project_quotas)
+            entity.save(session)
+
+    def get_by_external_project_id(self, external_project_id,
+                                   suppress_exception=False, session=None):
+        """Return configured Project Quotas for a project by project_id.
+
+        :param external_project_id: external ID of project to get quotas for
+        :param suppress_exception: when True, NotFound is not raised
+        :param session: SQLAlchemy session object.
+        :raises NotFound: if no quota config is found for the project
+        :return: None or Python dict of project quotas for project
+        """
+        session = self.get_session(session)
+        query = session.query(models.ProjectQuotas)
+        query = query.join(models.Project, models.ProjectQuotas.project)
+        query = query.filter(models.Project.external_id == external_project_id)
+        try:
+            entity = query.one()
+        except sa_orm.exc.NoResultFound:
+            if suppress_exception:
+                return None
+            else:
+                _raise_no_entities_found(self._do_entity_name())
+        return entity
+
+    def delete_by_external_project_id(self, external_project_id,
+                                      suppress_exception=False, session=None):
+        """Remove configured Project Quotas for a project by project_id.
+
+        :param external_project_id: external ID of project to delete quotas
+        :param suppress_exception: when True, NotFound is not raised
+        :param session: SQLAlchemy session object.
+        :raises NotFound: if no quota config is found for the project
+        :return: None
+        """
+
+        session = self.get_session(session)
+        query = session.query(models.ProjectQuotas)
+        query = query.join(models.Project, models.ProjectQuotas.project)
+        query = query.filter(models.Project.external_id == external_project_id)
+        try:
+            entity = query.one()
+        except sa_orm.exc.NoResultFound:
+            if suppress_exception:
+                return
+            else:
+                _raise_no_entities_found(self._do_entity_name())
+        entity.delete(session=session)
 
 
 def get_ca_repository():
@@ -1952,10 +2081,11 @@ def get_project_ca_repository():
                            ProjectCertificateAuthorityRepo)
 
 
-def get_project_secret_repository():
-    """Returns a singleton ProjectSecret repository instance."""
-    global _PROJECT_SECRET_REPOSITORY
-    return _get_repository(_PROJECT_SECRET_REPOSITORY, ProjectSecretRepo)
+def get_project_quotas_repository():
+    """Returns a singleton Project Quotas repository instance."""
+    global _PROJECT_QUOTAS_REPOSITORY
+    return _get_repository(_PROJECT_QUOTAS_REPOSITORY,
+                           ProjectQuotasRepo)
 
 
 def get_secret_acl_repository():

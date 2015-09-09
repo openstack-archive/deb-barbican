@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """
-API application handler for Cloudkeep's Barbican
+API application handler for Barbican
 """
 import pecan
 
@@ -24,32 +24,19 @@ try:
 except ImportError:
     newrelic_loaded = False
 
-from oslo_config import cfg
 from oslo_log import log
 
-from barbican.api.controllers import cas
-from barbican.api.controllers import containers
-from barbican.api.controllers import orders
-from barbican.api.controllers import secrets
-from barbican.api.controllers import transportkeys
 from barbican.api.controllers import versions
 from barbican.api import hooks
 from barbican.common import config
+from barbican import i18n as u
 from barbican.model import repositories
 from barbican import queue
 
+CONF = config.CONF
+
 if newrelic_loaded:
     newrelic.agent.initialize('/etc/newrelic/newrelic.ini')
-
-
-class RootController(object):
-    def __init__(self):
-        # Adding the controllers at runtime to due config loading issues
-        self.secrets = secrets.SecretsController()
-        self.orders = orders.OrdersController()
-        self.containers = containers.ContainersController()
-        self.transport_keys = transportkeys.TransportKeysController()
-        self.cas = cas.CertificateAuthoritiesController()
 
 
 def build_wsgi_app(controller=None, transactional=False):
@@ -61,45 +48,50 @@ def build_wsgi_app(controller=None, transactional=False):
     request_hooks = [hooks.JSONErrorHook()]
     if transactional:
         request_hooks.append(hooks.BarbicanTransactionHook())
+    if newrelic_loaded:
+        request_hooks.insert(0, hooks.NewRelicHook())
 
     # Create WSGI app
     wsgi_app = pecan.Pecan(
-        controller or RootController(),
+        controller or versions.AVAILABLE_VERSIONS[versions.DEFAULT_VERSION](),
         hooks=request_hooks,
         force_canonical=False
     )
     return wsgi_app
 
 
+def main_app(func):
+    def _wrapper(global_config, **local_conf):
+        # Queuing initialization
+        queue.init(CONF, is_server_side=False)
+
+        # Configure oslo logging and configuration services.
+        log.setup(CONF, 'barbican')
+
+        config.setup_remote_pydev_debug()
+
+        # Initializing the database engine and session factory before the app
+        # starts ensures we don't lose requests due to lazy initialiation of db
+        # connections.
+        repositories.setup_database_engine_and_factory()
+
+        wsgi_app = func(global_config, **local_conf)
+
+        if newrelic_loaded:
+            wsgi_app = newrelic.agent.WSGIApplicationWrapper(wsgi_app)
+        LOG = log.getLogger(__name__)
+        LOG.info(u._LI('Barbican app created and initialized'))
+        return wsgi_app
+    return _wrapper
+
+
+@main_app
 def create_main_app(global_config, **local_conf):
     """uWSGI factory method for the Barbican-API application."""
-
-    # Queuing initialization
-    CONF = cfg.CONF
-    queue.init(CONF, is_server_side=False)
-
-    # Configure oslo logging and configuration services.
-    config.parse_args()
-    log.setup(CONF, 'barbican')
-    config.setup_remote_pydev_debug()
-
-    # Initializing the database engine and session factory before the app
-    # starts ensures we don't lose requests due to lazy initialiation of db
-    # connections.
-    repositories.setup_database_engine_and_factory()
-
     # Setup app with transactional hook enabled
-    wsgi_app = build_wsgi_app(transactional=True)
+    return build_wsgi_app(versions.V1Controller(), transactional=True)
 
-    if newrelic_loaded:
-        wsgi_app = newrelic.agent.WSGIApplicationWrapper(wsgi_app)
+
+def create_version_app(global_config, **local_conf):
+    wsgi_app = pecan.make_app(versions.VersionsController())
     return wsgi_app
-
-
-def create_admin_app(global_config, **local_conf):
-    config.parse_args()
-    wsgi_app = pecan.make_app(versions.VersionController())
-    return wsgi_app
-
-
-create_version_app = create_admin_app

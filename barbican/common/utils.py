@@ -17,35 +17,42 @@
 Common utilities for Barbican.
 """
 import collections
+import importlib
 import mimetypes
 import uuid
 
-from oslo_config import cfg
 from oslo_log import log
 import pecan
+import six
 
+from barbican.common import config
 from barbican import i18n as u
 
 
-host_opts = [
-    cfg.StrOpt('host_href', default='http://localhost:9311'),
-]
-
-CONF = cfg.CONF
-CONF.register_opts(host_opts)
+CONF = config.CONF
 
 
 # Current API version
 API_VERSION = 'v1'
 
 
-def allow_all_content_types(f):
-    # Pecan decorator to not limit content types for controller routes
-    cfg = pecan.util._cfg(f)
+def _do_allow_certain_content_types(func, content_types_list=[]):
+    # Allows you to bypass pecan's content-type restrictions
+    cfg = pecan.util._cfg(func)
     cfg.setdefault('content_types', {})
     cfg['content_types'].update((value, '')
-                                for value in mimetypes.types_map.values())
-    return f
+                                for value in content_types_list)
+    return func
+
+
+def allow_certain_content_types(*content_types_list):
+    def _wrapper(func):
+        return _do_allow_certain_content_types(func, content_types_list)
+    return _wrapper
+
+
+def allow_all_content_types(f):
+    return _do_allow_certain_content_types(f, mimetypes.types_map.values())
 
 
 def hostname_for_refs(resource=None):
@@ -129,9 +136,20 @@ def generate_fullname_for(instance):
     module = type(instance).__module__
     class_name = type(instance).__name__
 
-    if module is None or module == "__builtin__":
+    if module is None or module == six.moves.builtins.__name__:
         return class_name
     return "{module}.{class_name}".format(module=module, class_name=class_name)
+
+
+def get_class_for(module_name, class_name):
+    """Create a Python class from its text-specified components."""
+    # Load the module via name, raising ImportError if module cannot be
+    # loaded.
+    python_module = importlib.import_module(module_name)
+
+    # Load and return the resolved Python class, raising AttributeError if
+    # class cannot be found.
+    return getattr(python_module, class_name)
 
 
 def generate_uuid():

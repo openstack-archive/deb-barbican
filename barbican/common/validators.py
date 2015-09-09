@@ -17,31 +17,26 @@ import abc
 import base64
 
 import jsonschema as schema
-import ldap
+from ldap3.utils.dn import parse_dn
 from OpenSSL import crypto
-from oslo_config import cfg
+from oslo_utils import timeutils
 import six
 
+from barbican.api import controllers
+from barbican.common import config
 from barbican.common import exception
 from barbican.common import hrefs
 from barbican.common import utils
 from barbican import i18n as u
 from barbican.model import models
 from barbican.model import repositories as repo
-from barbican.openstack.common import timeutils
 from barbican.plugin.interface import secret_store
 from barbican.plugin.util import mime_types
 
 
+DEFAULT_MAX_SECRET_BYTES = config.DEFAULT_MAX_SECRET_BYTES
 LOG = utils.getLogger(__name__)
-DEFAULT_MAX_SECRET_BYTES = 10000
-common_opts = [
-    cfg.IntOpt('max_allowed_secret_in_bytes',
-               default=DEFAULT_MAX_SECRET_BYTES),
-]
-
-CONF = cfg.CONF
-CONF.register_opts(common_opts)
+CONF = config.CONF
 
 MYSQL_SMALL_INT_MAX = 32767
 
@@ -88,7 +83,7 @@ def validate_ca_id(project_id, order_meta):
         project_id=project_id)
 
 
-def validate_stored_key_rsa_container(project_id, container_ref):
+def validate_stored_key_rsa_container(project_id, container_ref, req):
         try:
             container_id = hrefs.get_container_id_from_ref(container_ref)
         except Exception:
@@ -98,9 +93,9 @@ def validate_stored_key_rsa_container(project_id, container_ref):
             raise exception.InvalidContainer(reason=reason)
 
         container_repo = repo.get_container_repository()
-        container = container_repo.get(container_id,
-                                       external_project_id=project_id,
-                                       suppress_exception=True)
+
+        container = container_repo.get_container_by_id(entity_id=container_id,
+                                                       suppress_exception=True)
         if not container:
             reason = u._("Container Not Found")
             raise exception.InvalidContainer(reason=reason)
@@ -109,10 +104,11 @@ def validate_stored_key_rsa_container(project_id, container_ref):
             reason = u._("Container Wrong Type")
             raise exception.InvalidContainer(reason=reason)
 
-        # TODO(dave) Validation should be done to determine if the
-        # requester of the certificate has permissions to access the
-        # keys in this container.  This can be done after the ACL patch
-        # has landed.
+        ctxt = controllers._get_barbican_context(req)
+        inst = controllers.containers.ContainerController(container)
+        controllers._do_enforce_rbac(inst, req,
+                                     controllers.containers.CONTAINER_GET,
+                                     ctxt)
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -330,14 +326,12 @@ class NewSecretValidator(ValidatorBase):
         if payload_content_encoding == 'base64':
             try:
                 base64.b64decode(payload)
-            except TypeError:
+            except Exception:
                 LOG.exception("Problem parsing payload")
-                raise exception.InvalidObject(schema=schema_name,
-                                              reason=u._("Invalid payload "
-                                                         "for "
-                                                         "payload_content"
-                                                         "_encoding"),
-                                              property="payload")
+                raise exception.InvalidObject(
+                    schema=schema_name,
+                    reason=u._("Invalid payload for payload_content_encoding"),
+                    property="payload")
 
     def _extract_payload(self, json_data):
         """Extracts and returns the payload from the JSON data.
@@ -541,7 +535,7 @@ class TypeOrderValidator(ValidatorBase):
         If not, raise InvalidSubjectDN
         """
         try:
-            ldap.dn.str2dn(subject_dn)
+            parse_dn(subject_dn)
         except Exception:
             raise exception.InvalidSubjectDN(subject_dn=subject_dn)
 
@@ -634,16 +628,14 @@ class ACLValidator(ValidatorBase):
                                 {"type": "string", "maxLength": 255}
                             ]
                         },
-                        "creator-only": {"type": "boolean"}
+                        "project-access": {"type": "boolean"}
                     },
+                    "additionalProperties": False
                 }
             },
             "type": "object",
             "properties": {
                 "read": {"$ref": "#/definitions/acl_defintion"},
-                "write": {"$ref": "#/definitions/acl_defintion"},
-                "delete": {"$ref": "#/definitions/acl_defintion"},
-                "list": {"$ref": "#/definitions/acl_defintion"}
             },
             "additionalProperties": False
         }
@@ -850,5 +842,38 @@ class NewTransportKeyValidator(ValidatorBase):
                               u._("transport_key must be provided"),
                               "transport_key")
         json_data['transport_key'] = transport_key
+
+        return json_data
+
+
+class ProjectQuotaValidator(ValidatorBase):
+    """Validate a new project quota."""
+
+    def __init__(self):
+        self.name = 'Project Quota'
+
+        self.schema = {
+            'type': 'object',
+            'properties': {
+                'project_quotas': {
+                    'type': 'object',
+                    'properties': {
+                        'secrets': {'type': 'integer'},
+                        'orders': {'type': 'integer'},
+                        'containers': {'type': 'integer'},
+                        'transport_keys': {'type': 'integer'},
+                        'consumers': {'type': 'integer'}
+                    },
+                    'additionalProperties': False,
+                }
+            },
+            'required': ['project_quotas'],
+            'additionalProperties': False
+        }
+
+    def validate(self, json_data, parent_schema=None):
+        schema_name = self._full_name(parent_schema)
+
+        self._assert_schema_is_valid(json_data, schema_name)
 
         return json_data

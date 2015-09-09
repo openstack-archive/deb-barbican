@@ -17,12 +17,12 @@ import functools
 from os import path
 import time
 import types
-import urlparse
 import uuid
 
 import mock
 import oslotest.base as oslotest
 import six
+from six.moves.urllib import parse
 import webtest
 
 from OpenSSL import crypto
@@ -36,14 +36,15 @@ class BarbicanAPIBaseTestCase(oslotest.BaseTestCase):
     """Base TestCase for all tests needing to interact with a Barbican app."""
     root_controller = None
 
-    def _build_context(self, project_id):
+    def _build_context(self, project_id, roles=None, user=None, is_admin=True,
+                       policy_enforcer=None):
         context = barbican.context.RequestContext(
-            roles=None,
-            user=None,
+            roles=roles,
+            user=user,
             project=project_id,
-            is_admin=True
+            is_admin=is_admin
         )
-        context.policy_enforcer = None
+        context.policy_enforcer = policy_enforcer
         return context
 
     def setUp(self):
@@ -76,6 +77,7 @@ class BaseTestCase(oslotest.BaseTestCase):
         super(BaseTestCase, self).setUp()
         self.order_id = 'order1234'
         self.external_project_id = 'keystone1234'
+        self.request_id = 'request1234'
 
     def tearDown(self):
         super(BaseTestCase, self).tearDown()
@@ -212,19 +214,6 @@ class MockModelRepositoryMixin(object):
                                     mock_repo_obj=mock_project_repo,
                                     patcher_obj=self.mock_project_repo_patcher)
 
-    def setup_project_secret_repository_mock(
-            self, mock_project_secret_repo=mock.MagicMock()):
-        """Mocks the project-secret repository factory function
-
-        :param mock_project_secret_repo: The pre-configured mock project-secret
-                                         repo to be returned.
-        """
-        self.mock_project_secret_repo_patcher = None
-        self._setup_repository_mock(
-            repo_factory='get_project_secret_repository',
-            mock_repo_obj=mock_project_secret_repo,
-            patcher_obj=self.mock_project_secret_repo_patcher)
-
     def setup_secret_meta_repository_mock(
             self, mock_secret_meta_repo=mock.MagicMock()):
         """Mocks the secret-meta repository factory function
@@ -323,6 +312,10 @@ def construct_new_test_function(original_func, name, build_params):
         argdefs=six.get_function_defaults(original_func)
     )
 
+    for key, val in six.iteritems(original_func.__dict__):
+        if key != 'build_data':
+            new_func.__dict__[key] = val
+
     # Support either an arg list or kwarg dict for our data
     build_args = build_params if isinstance(build_params, list) else []
     build_kwargs = build_params if isinstance(build_params, dict) else {}
@@ -416,7 +409,7 @@ def create_timestamp_w_tz_and_offset(timezone=None, days=0, hours=0, minutes=0,
 
 
 def get_limit_and_offset_from_ref(ref):
-    matches = dict(urlparse.parse_qsl(urlparse.urlparse(ref).query))
+    matches = dict(parse.parse_qsl(parse.urlparse(ref).query))
     ref_limit = matches['limit']
     ref_offset = matches['offset']
 
@@ -461,60 +454,6 @@ def get_symmetric_key():
     return s
 
 
-def get_private_key():
-    s = ("-----BEGIN PRIVATE KEY-----\n"
-         "MIICdgIBADANBgkqhkiG9w0BAQEFAASCAmAwggJcAgEAAoGBAMxOUcg4eiBTZnIy\n"
-         "4XhEV+IoBbye/ZkXnxWQPnz9Cm+2C3rIYBev6WLqztSfi1EHnn3jM9p36KJuVgvA\n"
-         "Jr4wfn19hM9pw5Cq5hcnkVlBCAKoCM7p/jf7G2qv0yxlhXK3eZVzR/8Km3wImKN5\n"
-         "mJRqCv89I1LXyiuHYlVrznx8hjTZAgMBAAECgYAYyVu0rd1rNJMWQcQHAkujPXXM\n"
-         "t4FO5IXBaPmb0ltEyFJGOC8oUIhBHvmu5BhT4VfCMCFnXOrVYguAa3SH2HxP54Wb\n"
-         "xfycCNow5ikujEfdvsAZi1tnKedFRnJhdANCAM+6+fTNUzNElUW6kjuvwWWnRq7C\n"
-         "iCHqhd5ssVa8vMjPjQJBAPpMz0rXo2DDtYqQLOnWwAbV+djM1+ldmBdh/Q4zETDO\n"
-         "xgPfUvLBhU40LJt8NQeia6Ce4oYH+W4WRyNYvvmcGz8CQQDQ9V/8IuMJN6vyAKrc\n"
-         "WMPyLfYFu3wJ74/DX0EZ7lf+UhTlCEwEQaVQ78El1oFJDl7cjnH3Ay5GNsFfHOfd\n"
-         "uaHnAkAa21MCvNCS+WzpST8IeDpygVMlqBUivSAsoh78/w3BJu6oS7YixhD/qyl+\n"
-         "JX2rLApQWbwElaZ14X4QlN0o+08RAkEAi79vIDtcx69Z6ZGUs6UR9wfR/+dxf1ue\n"
-         "NDWiXmtOoiHXI422+SnGHCkcbefVszxPKQaDJYYVDpRUIv47+8fIhQJAIPlfqUpN\n"
-         "0c23beUUWItd+fSVLH+bxTUv+FUqLQIC2VlXVecg7+eAOMNzF2CqcpWstIcrYkV7\n"
-         "lECxnorexnYA8g==\n"
-         "-----END PRIVATE KEY-----")
-    return s
-
-
-def get_public_key():
-    s = ("-----BEGIN PUBLIC KEY-----\n"
-         "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDMTlHIOHogU2ZyMuF4RFfiKAW8\n"
-         "nv2ZF58VkD58/Qpvtgt6yGAXr+li6s7Un4tRB5594zPad+iiblYLwCa+MH59fYTP\n"
-         "acOQquYXJ5FZQQgCqAjO6f43+xtqr9MsZYVyt3mVc0f/Cpt8CJijeZiUagr/PSNS\n"
-         "18orh2JVa858fIY02QIDAQAB\n"
-         "-----END PUBLIC KEY-----")
-    return s
-
-
-def get_certificate():
-    s = ("-----BEGIN CERTIFICATE-----\n"
-         "MIIDTzCCArigAwIBAgIJANwgT2i4cVRAMA0GCSqGSIb3DQEBBQUAMHkxCzAJBgNV\n"
-         "BAYTAlVTMQswCQYDVQQIEwJUWDEPMA0GA1UEBxMGQXVzdGluMRYwFAYDVQQKEw1t\n"
-         "eWNvbXBhbnkuY29tMQ8wDQYDVQQDEwZjb21tb24xIzAhBgkqhkiG9w0BCQEWFGNv\n"
-         "bW1vbkBteWNvbXBhbnkuY29tMB4XDTE1MDIxNzIxMDA1N1oXDTE4MDIxNjIxMDA1\n"
-         "N1oweTELMAkGA1UEBhMCVVMxCzAJBgNVBAgTAlRYMQ8wDQYDVQQHEwZBdXN0aW4x\n"
-         "FjAUBgNVBAoTDW15Y29tcGFueS5jb20xDzANBgNVBAMTBmNvbW1vbjEjMCEGCSqG\n"
-         "SIb3DQEJARYUY29tbW9uQG15Y29tcGFueS5jb20wgZ8wDQYJKoZIhvcNAQEBBQAD\n"
-         "gY0AMIGJAoGBAMxOUcg4eiBTZnIy4XhEV+IoBbye/ZkXnxWQPnz9Cm+2C3rIYBev\n"
-         "6WLqztSfi1EHnn3jM9p36KJuVgvAJr4wfn19hM9pw5Cq5hcnkVlBCAKoCM7p/jf7\n"
-         "G2qv0yxlhXK3eZVzR/8Km3wImKN5mJRqCv89I1LXyiuHYlVrznx8hjTZAgMBAAGj\n"
-         "gd4wgdswHQYDVR0OBBYEFBxIlJZjp3+TkIwy8G3dqfCgL6GfMIGrBgNVHSMEgaMw\n"
-         "gaCAFBxIlJZjp3+TkIwy8G3dqfCgL6GfoX2kezB5MQswCQYDVQQGEwJVUzELMAkG\n"
-         "A1UECBMCVFgxDzANBgNVBAcTBkF1c3RpbjEWMBQGA1UEChMNbXljb21wYW55LmNv\n"
-         "bTEPMA0GA1UEAxMGY29tbW9uMSMwIQYJKoZIhvcNAQkBFhRjb21tb25AbXljb21w\n"
-         "YW55LmNvbYIJANwgT2i4cVRAMAwGA1UdEwQFMAMBAf8wDQYJKoZIhvcNAQEFBQAD\n"
-         "gYEANTlbvNaoADYMzGOoLgaAVt7tjQ6EZVXjswax1jnj8dEoQpUNCAzkkwFJDFqt\n"
-         "mOTTZxpWNbDm9AcbCubrLXwN22eBqYz02cBGoBnN/h2qINSL2caM08OMmMDm1g1Q\n"
-         "+iH+eUsCmvkTnylw8FJwN7TYV0No6V9/+aWvf6h1NqDiiLc=\n"
-         "-----END CERTIFICATE-----")
-    return s
-
-
 def is_cert_valid(expected, observed):
     c1 = crypto.load_certificate(crypto.FILETYPE_PEM, expected)
     c2 = crypto.load_certificate(crypto.FILETYPE_PEM, observed)
@@ -532,3 +471,7 @@ def is_private_key_valid(expected, observed):
 def is_public_key_valid(expected, observed):
     # TODO(alee) fill in the relevant test here
     return True
+
+
+class DummyClassForTesting(object):
+    pass

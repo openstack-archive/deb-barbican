@@ -30,13 +30,14 @@ import pki.kra
 import pki.profile
 from requests import exceptions as request_exceptions
 
+from barbican.common import config
 from barbican.common import exception
 from barbican.common import utils
 from barbican import i18n as u
 import barbican.plugin.interface.certificate_manager as cm
 import barbican.plugin.interface.secret_store as sstore
 
-CONF = cfg.CONF
+CONF = config.new_config()
 LOG = utils.getLogger(__name__)
 
 dogtag_plugin_group = cfg.OptGroup(name='dogtag_plugin',
@@ -51,9 +52,7 @@ dogtag_plugin_opts = [
                default="8443",
                help=u._('Port for the Dogtag instance')),
     cfg.StrOpt('nss_db_path',
-               help=u._('Path to the NSS certificate database for the KRA')),
-    cfg.StrOpt('nss_db_path_ca',
-               help=u._('Path to the NSS certificate database for the CA')),
+               help=u._('Path to the NSS certificate database')),
     cfg.StrOpt('nss_password',
                help=u._('Password for the NSS certificate databases')),
     cfg.StrOpt('simple_cmc_profile',
@@ -65,29 +64,67 @@ dogtag_plugin_opts = [
 
 CONF.register_group(dogtag_plugin_group)
 CONF.register_opts(dogtag_plugin_opts, group=dogtag_plugin_group)
+config.parse_args(CONF)
+
+CERT_HEADER = "-----BEGIN CERTIFICATE-----"
+CERT_FOOTER = "-----END CERTIFICATE-----"
+
+KRA_TRANSPORT_NICK = "KRA transport cert"
 
 
-def setup_nss_db(conf, subsystem):
-    crypto = None
-    create_nss_db = False
-    if subsystem == 'ca':
-        nss_db_path = conf.dogtag_plugin.nss_db_path_ca
+def _create_nss_db_if_needed(nss_db_path, nss_password):
+    """Creates NSS DB if it's not setup already
+
+    :returns: True or False whether the database was created or not.
+    """
+    if not os.path.exists(nss_db_path):
+        cryptoutil.NSSCryptoProvider.setup_database(
+            nss_db_path, nss_password, over_write=True)
+        return True
     else:
-        nss_db_path = conf.dogtag_plugin.nss_db_path
+        LOG.info(u._LI("The nss_db_path provided already exists, so the "
+                       "database is assumed to be already set up."))
+        return False
 
-    if nss_db_path is not None:
-        nss_password = conf.dogtag_plugin.nss_password
-        if nss_password is None:
-            raise ValueError(u._("nss_password is required"))
 
-        if not os.path.exists(nss_db_path):
-            create_nss_db = True
-            cryptoutil.NSSCryptoProvider.setup_database(
-                nss_db_path, nss_password, over_write=True)
+def _setup_nss_db_services(conf):
+    """Sets up NSS Crypto functions
 
-        crypto = cryptoutil.NSSCryptoProvider(nss_db_path, nss_password)
+    This sets up the NSSCryptoProvider and the database it needs for it to
+    store certificates. If the path specified in the configuration is already
+    existent, it will assume that the database is already setup.
 
-    return crypto, create_nss_db
+    This will also import the transport cert needed by the KRA if the NSS DB
+    was created.
+    """
+    nss_db_path, nss_password = (conf.dogtag_plugin.nss_db_path,
+                                 conf.dogtag_plugin.nss_password)
+    if nss_db_path is None:
+        LOG.warning(u._LW("nss_db_path was not provided so the crypto "
+                          "provider functions were not initialized."))
+        return None
+    if nss_password is None:
+        raise ValueError(u._("nss_password is required"))
+
+    nss_db_created = _create_nss_db_if_needed(nss_db_path, nss_password)
+    crypto = cryptoutil.NSSCryptoProvider(nss_db_path, nss_password)
+    if nss_db_created:
+        _import_kra_transport_cert_to_nss_db(conf, crypto)
+
+    return crypto
+
+
+def _import_kra_transport_cert_to_nss_db(conf, crypto):
+    try:
+        connection = create_connection(conf, 'kra')
+        kraclient = pki.kra.KRAClient(connection, crypto)
+        systemcert_client = kraclient.system_certs
+
+        transport_cert = systemcert_client.get_transport_cert()
+        crypto.import_cert(KRA_TRANSPORT_NICK, transport_cert, "u,u,u")
+    except Exception as e:
+        LOG.error("Error in importing transport cert."
+                  " KRA may not be enabled: " + str(e))
 
 
 def create_connection(conf, subsystem_path):
@@ -101,6 +138,9 @@ def create_connection(conf, subsystem_path):
         subsystem_path)
     connection.set_authentication_cert(pem_path)
     return connection
+
+crypto = _setup_nss_db_services(CONF)
+crypto.initialize()
 
 
 class DogtagPluginAlgorithmException(exception.BarbicanException):
@@ -122,8 +162,6 @@ class DogtagPluginNotSupportedException(exception.NotSupported):
 class DogtagKRAPlugin(sstore.SecretStoreBase):
     """Implementation of the secret store plugin with KRA as the backend."""
 
-    TRANSPORT_NICK = "KRA transport cert"
-
     # metadata constants
     ALG = "alg"
     BIT_LENGTH = "bit_length"
@@ -142,30 +180,15 @@ class DogtagKRAPlugin(sstore.SecretStoreBase):
     def __init__(self, conf=CONF):
         """Constructor - create the keyclient."""
         LOG.debug("starting DogtagKRAPlugin init")
-        crypto, create_nss_db = setup_nss_db(conf, 'kra')
         connection = create_connection(conf, 'kra')
 
         # create kraclient
         kraclient = pki.kra.KRAClient(connection, crypto)
         self.keyclient = kraclient.keys
-        self.systemcert_client = kraclient.system_certs
 
-        if crypto is not None:
-            if create_nss_db:
-                self.import_transport_cert(crypto)
-
-            crypto.initialize()
-            self.keyclient.set_transport_cert(
-                DogtagKRAPlugin.TRANSPORT_NICK)
+        self.keyclient.set_transport_cert(KRA_TRANSPORT_NICK)
 
         LOG.debug("completed DogtagKRAPlugin init")
-
-    def import_transport_cert(self, crypto):
-        # Get transport cert and insert in the certdb
-        transport_cert = self.systemcert_client.get_transport_cert()
-        crypto.import_cert(DogtagKRAPlugin.TRANSPORT_NICK,
-                           transport_cert,
-                           "u,u,u")
 
     def store_secret(self, secret_dto):
         """Store a secret in the KRA
@@ -497,20 +520,23 @@ class DogtagKRAPlugin(sstore.SecretStoreBase):
 
         Note that only algorithms supported by Dogtag will be mapped.
         """
-        if algorithm == sstore.KeyAlgorithm.AES:
+        if algorithm is None:
+            return None
+
+        if algorithm.lower() == sstore.KeyAlgorithm.AES.lower():
             return key.KeyClient.AES_ALGORITHM
-        elif algorithm == sstore.KeyAlgorithm.DES:
+        elif algorithm.lower() == sstore.KeyAlgorithm.DES.lower():
             return key.KeyClient.DES_ALGORITHM
-        elif algorithm == sstore.KeyAlgorithm.DESEDE:
+        elif algorithm.lower() == sstore.KeyAlgorithm.DESEDE.lower():
             return key.KeyClient.DES3_ALGORITHM
-        elif algorithm == sstore.KeyAlgorithm.DSA:
+        elif algorithm.lower() == sstore.KeyAlgorithm.DSA.lower():
             return key.KeyClient.DSA_ALGORITHM
-        elif algorithm == sstore.KeyAlgorithm.RSA:
+        elif algorithm.lower() == sstore.KeyAlgorithm.RSA.lower():
             return key.KeyClient.RSA_ALGORITHM
-        elif algorithm == sstore.KeyAlgorithm.DIFFIE_HELLMAN:
+        elif algorithm.lower() == sstore.KeyAlgorithm.DIFFIE_HELLMAN.lower():
             # may be supported, needs to be tested
             return None
-        elif algorithm == sstore.KeyAlgorithm.EC:
+        elif algorithm.lower() == sstore.KeyAlgorithm.EC.lower():
             # asymmetric keys not yet supported
             return None
         else:
@@ -613,13 +639,8 @@ class DogtagCAPlugin(cm.CertificatePluginBase):
 
     def __init__(self, conf=CONF):
         """Constructor - create the cert clients."""
-        crypto, create_nss_db = setup_nss_db(conf, 'ca')
         connection = create_connection(conf, 'ca')
         self.certclient = pki.cert.CertClient(connection)
-
-        if crypto is not None:
-            crypto.initialize()
-
         self.simple_cmc_profile = conf.dogtag_plugin.simple_cmc_profile
         self.auto_approved_profiles = conf.dogtag_plugin.auto_approved_profiles
 
@@ -759,8 +780,8 @@ class DogtagCAPlugin(cm.CertificatePluginBase):
         }
 
         if request_type not in jump_table:
-            raise DogtagPluginNotSupportedException(
-                "Dogtag plugin does not support %s request type".format(
+            raise DogtagPluginNotSupportedException(u._(
+                "Dogtag plugin does not support %s request type").format(
                     request_type))
 
         return jump_table[request_type](order_id, order_meta, plugin_meta,
@@ -804,8 +825,8 @@ class DogtagCAPlugin(cm.CertificatePluginBase):
         :param barbican_meta_dto:
         :return: cm.ResultDTO
         """
-        raise DogtagPluginNotSupportedException(
-            "Dogtag plugin does not support %s request type".format(
+        raise DogtagPluginNotSupportedException(u._(
+            "Dogtag plugin does not support %s request type").format(
                 cm.CertificateRequestType.FULL_CMC_REQUEST))
 
     @_catch_enrollment_exceptions
@@ -949,9 +970,22 @@ class DogtagCAPlugin(cm.CertificatePluginBase):
         dto = None
         if request_status == pki.cert.CertRequestStatus.COMPLETE:
             if cert is not None:
+                # Barbican is expecting base 64 encoded PEM, so we base64
+                # encode below.
+                #
+                # Currently there is an inconsistency in what Dogtag returns
+                # for certificates and intermediates.  For certs, we return
+                # PEM, whereas for intermediates, we return headerless PEM.
+                # This is being addressed in Dogtag ticket:
+                # https://fedorahosted.org/pki/ticket/1374
+                #
+                # Until this is addressed, simply add the missing headers
+                cert_chain = (CERT_HEADER + "\r\n" + cert.pkcs7_cert_chain +
+                              CERT_FOOTER)
+
                 dto = cm.ResultDTO(cm.CertificateStatus.CERTIFICATE_GENERATED,
-                                   certificate=cert.encoded,
-                                   intermediates=cert.pkcs7_cert_chain)
+                                   certificate=base64.b64encode(cert.encoded),
+                                   intermediates=base64.b64encode(cert_chain))
             else:
                 raise cm.CertificateGeneralException(
                     u._("request_id {req_id} returns COMPLETE but no cert "

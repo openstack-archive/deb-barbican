@@ -18,6 +18,7 @@ from barbican.api.controllers import acls
 from barbican.api.controllers import consumers
 from barbican.common import exception
 from barbican.common import hrefs
+from barbican.common import quota
 from barbican.common import resources as res
 from barbican.common import utils
 from barbican.common import validators
@@ -26,6 +27,8 @@ from barbican.model import models
 from barbican.model import repositories as repo
 
 LOG = utils.getLogger(__name__)
+
+CONTAINER_GET = 'container:get'
 
 
 def container_not_found():
@@ -45,7 +48,7 @@ class ContainerController(controllers.ACLMixin):
         self.validator = validators.ContainerValidator()
         self.consumers = consumers.ContainerConsumersController(
             self.container_id)
-        self.acls = acls.ContainerACLsController(self.container_id)
+        self.acl = acls.ContainerACLsController(self.container)
 
     def get_acl_tuple(self, req, **kwargs):
         d = self.get_acl_dict_for_user(req, self.container.container_acls)
@@ -53,19 +56,21 @@ class ContainerController(controllers.ACLMixin):
         d['creator_id'] = self.container.creator_id
         return 'container', d
 
-    @pecan.expose(generic=True)
+    @pecan.expose(generic=True, template='json')
     def index(self, **kwargs):
         pecan.abort(405)  # HTTP 405 Method Not Allowed as default
 
     @index.when(method='GET', template='json')
     @controllers.handle_exceptions(u._('Container retrieval'))
-    @controllers.enforce_rbac('container:get')
+    @controllers.enforce_rbac(CONTAINER_GET)
     def on_get(self, external_project_id):
         dict_fields = self.container.to_dict_fields()
 
         for secret_ref in dict_fields['secret_refs']:
             hrefs.convert_to_hrefs(secret_ref)
 
+        LOG.info(u._LI('Retrieved container for project: %s'),
+                 external_project_id)
         return hrefs.convert_to_hrefs(
             hrefs.convert_to_hrefs(dict_fields)
         )
@@ -88,6 +93,9 @@ class ContainerController(controllers.ACLMixin):
             LOG.exception(u._LE('Problem deleting container'))
             container_not_found()
 
+        LOG.info(u._LI('Deleted container for project: %s'),
+                 external_project_id)
+
         for consumer in container_consumers[0]:
             try:
                 self.consumer_repo.delete_entity_by_id(
@@ -104,6 +112,8 @@ class ContainersController(controllers.ACLMixin):
         self.container_repo = repo.get_container_repository()
         self.secret_repo = repo.get_secret_repository()
         self.validator = validators.ContainerValidator()
+        self.quota_enforcer = quota.QuotaEnforcer('containers',
+                                                  self.container_repo)
 
     @pecan.expose()
     def _lookup(self, container_id, *remainder):
@@ -114,7 +124,7 @@ class ContainersController(controllers.ACLMixin):
 
         return ContainerController(container), remainder
 
-    @pecan.expose(generic=True)
+    @pecan.expose(generic=True, template='json')
     def index(self, **kwargs):
         pecan.abort(405)  # HTTP 405 Method Not Allowed as default
 
@@ -128,6 +138,7 @@ class ContainersController(controllers.ACLMixin):
             project_id,
             offset_arg=kw.get('offset', 0),
             limit_arg=kw.get('limit', None),
+            name_arg=kw.get('name', None),
             suppress_exception=True
         )
 
@@ -154,6 +165,7 @@ class ContainersController(controllers.ACLMixin):
             )
             resp_ctrs_overall.update({'total': total})
 
+        LOG.info(u._LI('Retrieved container list for project: %s'), project_id)
         return resp_ctrs_overall
 
     @index.when(method='POST', template='json')
@@ -168,6 +180,8 @@ class ContainersController(controllers.ACLMixin):
         ctxt = controllers._get_barbican_context(pecan.request)
         if ctxt:  # in authenticated pipleline case, always use auth token user
             data['creator_id'] = ctxt.user
+
+        self.quota_enforcer.enforce(project)
 
         LOG.debug('Start on_post...%s', data)
 
@@ -195,5 +209,7 @@ class ContainersController(controllers.ACLMixin):
 
         pecan.response.status = 201
         pecan.response.headers['Location'] = url
+        LOG.info(u._LI('Created a container for project: %s'),
+                 external_project_id)
 
         return {'container_ref': url}

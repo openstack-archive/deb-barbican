@@ -16,11 +16,11 @@ import base64
 import os
 
 import mock
+from oslo_utils import timeutils
 
 from barbican.common import validators
 from barbican.model import models
 from barbican.model import repositories
-from barbican.openstack.common import timeutils
 from barbican.tests import utils
 
 project_repo = repositories.get_project_repository()
@@ -276,6 +276,40 @@ class WhenGettingPuttingOrDeletingSecret(utils.BarbicanAPIBaseTestCase):
         headers = {'Accept': 'text/plain'}
         get_resp = self.app.get(
             '/secrets/{0}'.format(secret_uuid), headers=headers
+        )
+        self.assertEqual(200, get_resp.status_int)
+        self.assertEqual(payload, get_resp.body)
+
+    def test_get_secret_payload_with_blank_accept_header(self):
+        payload = 'a very interesting string'
+        resp, secret_uuid = create_secret(
+            self.app,
+            payload=payload,
+            content_type='text/plain'
+        )
+
+        self.assertEqual(201, resp.status_int)
+
+        headers = {'Accept': ''}
+        get_resp = self.app.get(
+            '/secrets/{0}/payload'.format(secret_uuid), headers=headers
+        )
+        self.assertEqual(200, get_resp.status_int)
+        self.assertEqual(payload, get_resp.body)
+
+    def test_get_secret_payload_with_no_accept_header(self):
+        payload = 'a very interesting string'
+        resp, secret_uuid = create_secret(
+            self.app,
+            payload=payload,
+            content_type='text/plain'
+        )
+
+        self.assertEqual(201, resp.status_int)
+
+        headers = {}
+        get_resp = self.app.get(
+            '/secrets/{0}/payload'.format(secret_uuid), headers=headers
         )
         self.assertEqual(200, get_resp.status_int)
         self.assertEqual(payload, get_resp.body)

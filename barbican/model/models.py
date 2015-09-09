@@ -18,6 +18,8 @@ Defines database models for Barbican
 """
 import hashlib
 
+from oslo_serialization import jsonutils as json
+from oslo_utils import timeutils
 import six
 import sqlalchemy as sa
 from sqlalchemy.ext import compiler
@@ -29,8 +31,6 @@ from sqlalchemy import types as sql_types
 from barbican.common import exception
 from barbican.common import utils
 from barbican import i18n as u
-from barbican.openstack.common import jsonutils as json
-from barbican.openstack.common import timeutils
 from barbican.plugin.interface import secret_store
 
 LOG = utils.getLogger(__name__)
@@ -215,28 +215,6 @@ class SoftDeleteMixIn(object):
         self._do_delete_children(session)
 
 
-class ProjectSecret(BASE, SoftDeleteMixIn, ModelBase):
-    """Represents an association between a Project and a Secret."""
-
-    __tablename__ = 'project_secret'
-
-    role = sa.Column(sa.String(255))
-    secret = orm.relationship("Secret", backref="project_assocs")
-    project_id = sa.Column(
-        sa.String(36),
-        sa.ForeignKey('projects.id', name='project_secret_project_fk'),
-        index=True,
-        nullable=False)
-    secret_id = sa.Column(
-        sa.String(36),
-        sa.ForeignKey('secrets.id', name='project_secret_secret_fk'),
-        index=True,
-        nullable=False)
-
-    __table_args__ = (sa.UniqueConstraint(
-        'project_id', 'secret_id', name='_project_secret_uc'),)
-
-
 class ContainerSecret(BASE, SoftDeleteMixIn, ModelBase):
     """Represents an association between a Container and a Secret."""
 
@@ -262,8 +240,7 @@ class ContainerSecret(BASE, SoftDeleteMixIn, ModelBase):
 class Project(BASE, SoftDeleteMixIn, ModelBase):
     """Represents a Project in the datastore.
 
-    Projects are users that wish to store secret information within
-    Cloudkeep's Barbican.
+    Projects are users that wish to store secret information within Barbican.
     """
 
     __tablename__ = 'projects'
@@ -271,10 +248,11 @@ class Project(BASE, SoftDeleteMixIn, ModelBase):
     external_id = sa.Column(sa.String(255), unique=True)
 
     orders = orm.relationship("Order", backref="project")
-    secrets = orm.relationship("ProjectSecret", backref="projects")
+    secrets = orm.relationship("Secret", backref="project")
     keks = orm.relationship("KEKDatum", backref="project")
     containers = orm.relationship("Container", backref="project")
     cas = orm.relationship("ProjectCertificateAuthority", backref="project")
+    project_quotas = orm.relationship("ProjectQuotas", backref="project")
 
     def _do_extra_dict_fields(self):
         """Sub-class hook method: return dict of fields."""
@@ -285,9 +263,8 @@ class Secret(BASE, SoftDeleteMixIn, ModelBase):
     """Represents a Secret in the datastore.
 
     Secrets are any information Projects wish to store within
-    Cloudkeep's Barbican, though the actual encrypted data
-    is stored in one or more EncryptedData entities on behalf
-    of a Secret.
+    Barbican, though the actual encrypted data is stored in one
+    or more EncryptedData entities on behalf of a Secret.
     """
 
     __tablename__ = 'secrets'
@@ -300,6 +277,11 @@ class Secret(BASE, SoftDeleteMixIn, ModelBase):
     bit_length = sa.Column(sa.Integer)
     mode = sa.Column(sa.String(255))
     creator_id = sa.Column(sa.String(255))
+    project_id = sa.Column(
+        sa.String(36),
+        sa.ForeignKey('projects.id', name='secrets_project_fk'),
+        index=True,
+        nullable=False)
 
     # TODO(jwood): Performance - Consider avoiding full load of all
     #   datum attributes here. This is only being done to support the
@@ -331,6 +313,7 @@ class Secret(BASE, SoftDeleteMixIn, ModelBase):
             self.bit_length = parsed_request.get('bit_length')
             self.mode = parsed_request.get('mode')
             self.creator_id = parsed_request.get('creator_id')
+            self.project_id = parsed_request.get('project_id')
 
         self.status = States.ACTIVE
 
@@ -762,6 +745,8 @@ class ContainerConsumerMetadatum(BASE, SoftDeleteMixIn, ModelBase):
 
     container_id = sa.Column(sa.String(36), sa.ForeignKey('containers.id'),
                              index=True, nullable=False)
+    project_id = sa.Column(sa.String(36), sa.ForeignKey('projects.id'),
+                           index=True, nullable=True)
     name = sa.Column(sa.String(36))
     URL = sa.Column(sa.String(500))
     data_hash = sa.Column(sa.CHAR(64))
@@ -772,7 +757,7 @@ class ContainerConsumerMetadatum(BASE, SoftDeleteMixIn, ModelBase):
         sa.Index('values_index', 'container_id', 'name', 'URL')
     )
 
-    def __init__(self, container_id, parsed_request):
+    def __init__(self, container_id, project_id, parsed_request):
         """Registers a Consumer to a Container."""
         super(ContainerConsumerMetadatum, self).__init__()
 
@@ -780,6 +765,7 @@ class ContainerConsumerMetadatum(BASE, SoftDeleteMixIn, ModelBase):
         # data_hash attribute.
         if container_id and parsed_request:
             self.container_id = container_id
+            self.project_id = project_id
             self.name = parsed_request.get('name')
             self.URL = parsed_request.get('URL')
             hash_text = ''.join((self.container_id, self.name, self.URL))
@@ -1053,7 +1039,7 @@ class SecretACL(BASE, ModelBase):
 
     operation = sa.Column(sa.String(255), nullable=False)
 
-    creator_only = sa.Column(sa.Boolean, nullable=False, default=False)
+    project_access = sa.Column(sa.Boolean, nullable=False, default=True)
 
     secret = orm.relationship(
         'Secret', backref=orm.backref('secret_acls', lazy=False))
@@ -1065,7 +1051,8 @@ class SecretACL(BASE, ModelBase):
     __table_args__ = (sa.UniqueConstraint(
         'secret_id', 'operation', name='_secret_acl_operation_uc'),)
 
-    def __init__(self, secret_id, operation, creator_only=None, user_ids=None):
+    def __init__(self, secret_id, operation, project_access=None,
+                 user_ids=None):
         """Creates secret ACL entity."""
         super(SecretACL, self).__init__()
 
@@ -1079,8 +1066,8 @@ class SecretACL(BASE, ModelBase):
             raise exception.MissingArgumentError(msg.format("operation"))
         self.operation = operation
 
-        if creator_only is not None:
-            self.creator_only = creator_only
+        if project_access is not None:
+            self.project_access = project_access
         self.status = States.ACTIVE
         if user_ids is not None and isinstance(user_ids, list):
             userids = set(user_ids)  # remove duplicate if any
@@ -1103,7 +1090,7 @@ class SecretACL(BASE, ModelBase):
         fields = {'acl_id': self.id,
                   'secret_id': self.secret_id,
                   'operation': self.operation,
-                  'creator_only': self.creator_only}
+                  'project_access': self.project_access}
         if users:
             fields['users'] = users
         return fields
@@ -1128,7 +1115,7 @@ class ContainerACL(BASE, ModelBase):
 
     operation = sa.Column(sa.String(255), nullable=False)
 
-    creator_only = sa.Column(sa.Boolean, nullable=False, default=False)
+    project_access = sa.Column(sa.Boolean, nullable=False, default=True)
 
     container = orm.relationship(
         'Container', backref=orm.backref('container_acls', lazy=False))
@@ -1140,7 +1127,7 @@ class ContainerACL(BASE, ModelBase):
     __table_args__ = (sa.UniqueConstraint(
         'container_id', 'operation', name='_container_acl_operation_uc'),)
 
-    def __init__(self, container_id, operation, creator_only=None,
+    def __init__(self, container_id, operation, project_access=None,
                  user_ids=None):
         """Creates container ACL entity."""
         super(ContainerACL, self).__init__()
@@ -1155,8 +1142,8 @@ class ContainerACL(BASE, ModelBase):
             raise exception.MissingArgumentError(msg.format("operation"))
         self.operation = operation
 
-        if creator_only is not None:
-            self.creator_only = creator_only
+        if project_access is not None:
+            self.project_access = project_access
         self.status = States.ACTIVE
 
         if user_ids is not None and isinstance(user_ids, list):
@@ -1180,7 +1167,7 @@ class ContainerACL(BASE, ModelBase):
         fields = {'acl_id': self.id,
                   'container_id': self.container_id,
                   'operation': self.operation,
-                  'creator_only': self.creator_only}
+                  'project_access': self.project_access}
         if users:
             fields['users'] = users
         return fields
@@ -1261,24 +1248,70 @@ class ContainerACLUser(BASE, ModelBase):
                 'user_id': self.user_id}
 
 
-# Keep this tuple synchronized with the models in the file
-MODELS = [ProjectSecret, Project, Secret, EncryptedDatum, Order, Container,
-          ContainerConsumerMetadatum, ContainerSecret, TransportKey,
-          SecretStoreMetadatum, OrderPluginMetadatum, OrderBarbicanMetadatum,
-          KEKDatum, CertificateAuthority, CertificateAuthorityMetadatum,
-          ProjectCertificateAuthority, PreferredCertificateAuthority,
-          SecretACL, ContainerACL, SecretACLUser, ContainerACLUser,
-          OrderRetryTask]
+class ProjectQuotas(BASE, ModelBase):
+    """Stores Project Quotas.
 
+    Class to define project specific resource quotas.
 
-def register_models(engine):
-    """Creates database tables for all models with the given engine."""
-    LOG.debug("Models: %s", repr(MODELS))
-    for model in MODELS:
-        model.metadata.create_all(engine)
+    Project quota deletes are not soft-deletes.
+    """
 
+    __tablename__ = 'project_quotas'
 
-def unregister_models(engine):
-    """Drops database tables for all models with the given engine."""
-    for model in MODELS:
-        model.metadata.drop_all(engine)
+    project_id = sa.Column(
+        sa.String(36),
+        sa.ForeignKey('projects.id', name='project_quotas_fk'),
+        index=True,
+        nullable=False)
+    secrets = sa.Column(sa.Integer, nullable=True)
+    orders = sa.Column(sa.Integer, nullable=True)
+    containers = sa.Column(sa.Integer, nullable=True)
+    transport_keys = sa.Column(sa.Integer, nullable=True)
+    consumers = sa.Column(sa.Integer, nullable=True)
+
+    def __init__(self, project_id=None, parsed_project_quotas=None):
+        """Creates Project Quotas entity from a project and a dict.
+
+        :param project_id: the internal id of the project with quotas
+        :param parsed_project_quotas: a dict with the keys matching the
+        resources for which quotas are to be set, and the values containing
+        the quota value to be set for this project and that resource.
+        :return: None
+        """
+        super(ProjectQuotas, self).__init__()
+
+        msg = u._("Must supply non-None {0} argument for ProjectQuotas entry.")
+
+        if project_id is None:
+            raise exception.MissingArgumentError(msg.format("project_id"))
+        self.project_id = project_id
+
+        if parsed_project_quotas is None:
+            self.secrets = None
+            self.orders = None
+            self.containers = None
+            self.transport_keys = None
+            self.consumers = None
+        else:
+            self.secrets = parsed_project_quotas.get('secrets')
+            self.orders = parsed_project_quotas.get('orders')
+            self.containers = parsed_project_quotas.get('containers')
+            self.transport_keys = parsed_project_quotas.get('transport_keys')
+            self.consumers = parsed_project_quotas.get('consumers')
+
+    def _do_extra_dict_fields(self):
+        """Sub-class hook method: return dict of fields."""
+        ret = {
+            'project_id': self.project_id,
+        }
+        if self.secrets:
+            ret['secrets'] = self.secrets
+        if self.orders:
+            ret['orders'] = self.orders
+        if self.containers:
+            ret['containers'] = self.containers
+        if self.transport_keys:
+            ret['transport_keys'] = self.transport_keys
+        if self.consumers:
+            ret['consumers'] = self.consumers
+        return ret

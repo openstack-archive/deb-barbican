@@ -49,7 +49,6 @@ class WhenTestingSecretACLRepository(database_utils.RepositoryTestCase,
         # Setup the secret and needed base relationship
         secret_repo = repositories.get_secret_repository()
         session = secret_repo.get_session()
-        secret = secret_repo.create_from(models.Secret(), session=session)
 
         if project_id is None:  # don't re-create project if it created earlier
             project = models.Project()
@@ -57,10 +56,11 @@ class WhenTestingSecretACLRepository(database_utils.RepositoryTestCase,
             project.save(session=session)
             project_id = project.id
 
-        project_secret = models.ProjectSecret()
-        project_secret.secret_id = secret.id
-        project_secret.project_id = project_id
-        project_secret.save(session=session)
+        secret_model = models.Secret()
+        secret_model.project_id = project_id
+        secret = secret_repo.create_from(secret_model, session=session)
+
+        secret.save(session=session)
 
         session.commit()
         return secret
@@ -117,7 +117,7 @@ class WhenTestingSecretACLRepository(database_utils.RepositoryTestCase,
             secret, acl1, user_ids=['u1', 'u2'], session=session)
 
         acl2 = self.acl_repo.create_from(models.SecretACL(
-            secret.id, 'write', True), session)
+            secret.id, 'write', False), session)
         self.acl_repo.create_or_replace_from(
             secret, acl2, user_ids=['u1', 'u2', 'u3'], session=session)
 
@@ -131,8 +131,8 @@ class WhenTestingSecretACLRepository(database_utils.RepositoryTestCase,
         self.assertEqual(3, len(acls))
 
         id_map = self._map_id_to_acl(acls)
-        self.assertEqual(False, id_map[acl1.id].creator_only)
-        self.assertEqual(True, id_map[acl2.id].creator_only)
+        self.assertEqual(True, id_map[acl1.id].project_access)
+        self.assertEqual(False, id_map[acl2.id].project_access)
         self.assertEqual('read', id_map[acl1.id].operation)
         self.assertEqual('write', id_map[acl2.id].operation)
         self.assertEqual('delete', id_map[acl3.id].operation)
@@ -167,7 +167,7 @@ class WhenTestingSecretACLRepository(database_utils.RepositoryTestCase,
         """Check create_or_replace_from and get count call.
 
         It modifies existing acls with users and make sure that updated users
-        and creator_only flag changes are returned when acls are queries by
+        and project_access flag changes are returned when acls are queries by
         secret id. It uses get count to assert expected number of acls for that
         secret.
         """
@@ -194,7 +194,7 @@ class WhenTestingSecretACLRepository(database_utils.RepositoryTestCase,
 
         id_map = self._map_id_to_acl(acls)
         # replace users in existing acls
-        id_map[acl1.id].creator_only = True
+        id_map[acl1.id].project_access = False
         self.acl_repo.create_or_replace_from(
             secret, id_map[acl1.id], user_ids=['u5'], session=session)
 
@@ -211,9 +211,9 @@ class WhenTestingSecretACLRepository(database_utils.RepositoryTestCase,
         id_map = self._map_id_to_acl(acls)
 
         self.assertEqual(3, len(acls))
-        self.assertEqual(True, id_map[acl1.id].creator_only)
-        self.assertEqual(False, id_map[acl2.id].creator_only)
-        self.assertEqual(False, id_map[acl3.id].creator_only)
+        self.assertEqual(False, id_map[acl1.id].project_access)
+        self.assertEqual(True, id_map[acl2.id].project_access)
+        self.assertEqual(True, id_map[acl3.id].project_access)
         self._assert_acl_users(['u5'], acls, acl1.id)
         self._assert_acl_users(['u1', 'u2', 'u3', 'u4'], acls, acl2.id)
         self._assert_acl_users(['u1', 'u2', 'u4'], acls, acl3.id)
@@ -226,8 +226,7 @@ class WhenTestingSecretACLRepository(database_utils.RepositoryTestCase,
                                          session)
         self.acl_repo.create_or_replace_from(secret1, acl1)
 
-        secret2 = self._create_base_secret(
-            secret1.project_assocs[0].project_id)
+        secret2 = self._create_base_secret(secret1.project.id)
         acl21 = self.acl_repo.create_from(models.SecretACL(secret2.id, 'read',
                                                            None, ['u3', 'u4']),
                                           session)
@@ -369,7 +368,7 @@ class WhenTestingContainerACLRepository(database_utils.RepositoryTestCase,
             container, acl1, user_ids=['u1', 'u2'], session=session)
 
         acl2 = self.acl_repo.create_from(models.ContainerACL(
-            container.id, 'write', True), session)
+            container.id, 'write', False), session)
         self.acl_repo.create_or_replace_from(
             container, acl2, user_ids=['u1', 'u2', 'u3'], session=session)
 
@@ -383,8 +382,8 @@ class WhenTestingContainerACLRepository(database_utils.RepositoryTestCase,
         self.assertEqual(3, len(acls))
 
         id_map = self._map_id_to_acl(acls)
-        self.assertEqual(False, id_map[acl1.id].creator_only)
-        self.assertEqual(True, id_map[acl2.id].creator_only)
+        self.assertEqual(True, id_map[acl1.id].project_access)
+        self.assertEqual(False, id_map[acl2.id].project_access)
         self.assertEqual('read', id_map[acl1.id].operation)
         self.assertEqual('write', id_map[acl2.id].operation)
         self.assertEqual('list', id_map[acl3.id].operation)
@@ -419,7 +418,7 @@ class WhenTestingContainerACLRepository(database_utils.RepositoryTestCase,
         """Check create_or_replace_from and get count call.
 
         It modifies existing acls with users and make sure that updated users
-        and creator_only flag changes are returned when acls are queries by
+        and project_access flag changes are returned when acls are queries by
         secret id. It uses get count to assert expected number of acls for that
         secret.
         """
@@ -446,7 +445,7 @@ class WhenTestingContainerACLRepository(database_utils.RepositoryTestCase,
 
         id_map = self._map_id_to_acl(acls)
         # replace users in existing acls
-        id_map[acl1.id].creator_only = True
+        id_map[acl1.id].project_access = False
         self.acl_repo.create_or_replace_from(
             container, id_map[acl1.id], user_ids=['u5'], session=session)
 
@@ -463,9 +462,9 @@ class WhenTestingContainerACLRepository(database_utils.RepositoryTestCase,
         id_map = self._map_id_to_acl(acls)
 
         self.assertEqual(3, len(acls))
-        self.assertEqual(True, id_map[acl1.id].creator_only)
-        self.assertEqual(False, id_map[acl2.id].creator_only)
-        self.assertEqual(False, id_map[acl3.id].creator_only)
+        self.assertEqual(False, id_map[acl1.id].project_access)
+        self.assertEqual(True, id_map[acl2.id].project_access)
+        self.assertEqual(True, id_map[acl3.id].project_access)
         self._assert_acl_users(['u5'], acls, acl1.id)
         self._assert_acl_users(['u1', 'u2', 'u3', 'u4'], acls, acl2.id)
         self._assert_acl_users(['u1', 'u2', 'u4'], acls, acl3.id)

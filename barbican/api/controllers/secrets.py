@@ -10,15 +10,15 @@
 #  License for the specific language governing permissions and limitations
 #  under the License.
 
-import urllib
-
 import pecan
+from six.moves.urllib import parse
 
 from barbican import api
 from barbican.api import controllers
 from barbican.api.controllers import acls
 from barbican.common import exception
 from barbican.common import hrefs
+from barbican.common import quota
 from barbican.common import resources as res
 from barbican.common import utils
 from barbican.common import validators
@@ -64,13 +64,13 @@ class SecretController(controllers.ACLMixin):
 
     def get_acl_tuple(self, req, **kwargs):
         d = self.get_acl_dict_for_user(req, self.secret.secret_acls)
-        d['project_id'] = self.secret.project_assocs[0].projects.external_id
+        d['project_id'] = self.secret.project.external_id
         d['creator_id'] = self.secret.creator_id
         return 'secret', d
 
     @pecan.expose()
     def _lookup(self, sub_resource, *remainder):
-        if sub_resource == 'acls':
+        if sub_resource == 'acl':
             return acls.SecretACLsController(self.secret), remainder
         else:
             pecan.abort(405)  # only 'acl' as sub-resource is supported
@@ -124,10 +124,13 @@ class SecretController(controllers.ACLMixin):
         # project associated with secret. The lookup project_id needs to be
         # derived from the secret's data considering authorization is already
         # done.
-        external_project_id = secret.project_assocs[0].projects.external_id
+        external_project_id = secret.project.external_id
         project = res.get_or_create_project(external_project_id)
 
-        pecan.override_template('', pecan.request.accept.header_value)
+        # default to application/octet-stream if there is no Accept header
+        accept_header = getattr(pecan.request.accept, 'header_value',
+                                'application/octet-stream')
+        pecan.override_template('', accept_header)
 
         twsk = kwargs.get('trans_wrapped_session_key', None)
         transport_key = None
@@ -136,7 +139,7 @@ class SecretController(controllers.ACLMixin):
             transport_key = self._get_transport_key(
                 kwargs.get('transport_key_id', None))
 
-        return plugin.get_secret(pecan.request.accept.header_value,
+        return plugin.get_secret(accept_header,
                                  secret,
                                  project,
                                  twsk,
@@ -224,6 +227,7 @@ class SecretsController(controllers.ACLMixin):
         LOG.debug('Creating SecretsController')
         self.validator = validators.NewSecretValidator()
         self.secret_repo = repo.get_secret_repository()
+        self.quota_enforcer = quota.QuotaEnforcer('secrets', self.secret_repo)
 
     @pecan.expose()
     def _lookup(self, secret_id, *remainder):
@@ -256,7 +260,7 @@ class SecretsController(controllers.ACLMixin):
 
         name = kw.get('name', '')
         if name:
-            name = urllib.unquote_plus(name)
+            name = parse.unquote_plus(name)
 
         bits = kw.get('bits', 0)
         try:
@@ -306,6 +310,8 @@ class SecretsController(controllers.ACLMixin):
 
         data = api.load_body(pecan.request, validator=self.validator)
         project = res.get_or_create_project(external_project_id)
+
+        self.quota_enforcer.enforce(project)
 
         transport_key_needed = data.get('transport_key_needed',
                                         'false').lower() == 'true'

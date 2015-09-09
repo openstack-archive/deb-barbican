@@ -22,32 +22,33 @@ from barbican.model import models
 from barbican.plugin.crypto import crypto
 from barbican.plugin.interface import secret_store
 from barbican.plugin import store_crypto
+from barbican.tests import keys
 from barbican.tests import utils as test_utils
 
 
 def get_private_dto():
-    spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 1024)
+    spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 2048)
     return secret_store.SecretDTO(secret_store.SecretType.PRIVATE,
                                   base64.b64encode(
-                                      test_utils.get_private_key()),
+                                      keys.get_private_key_pem()),
                                   spec,
                                   'application/pkcs8')
 
 
 def get_public_dto():
-    spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 1024)
+    spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 2048)
     return secret_store.SecretDTO(secret_store.SecretType.PUBLIC,
                                   base64.b64encode(
-                                      test_utils.get_public_key()),
+                                      keys.get_public_key_pem()),
                                   spec,
                                   'application/octet-stream')
 
 
 def get_certificate_dto():
-    spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 1024)
+    spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 2048)
     return secret_store.SecretDTO(secret_store.SecretType.CERTIFICATE,
                                   base64.b64encode(
-                                      test_utils.get_certificate()),
+                                      keys.get_certificate_pem()),
                                   spec,
                                   'application/pkix-cert')
 
@@ -124,7 +125,6 @@ class TestSecretStoreBase(testtools.TestCase,
 
     def init_patchers(self):
         self._config_get_secret_repository()
-        self._config_get_project_secret_repository()
         self._config_get_encrypted_datum_repository()
         self._config_get_kek_datum_repository()
 
@@ -138,12 +138,6 @@ class TestSecretStoreBase(testtools.TestCase,
         self.secret_repo = mock.MagicMock()
         self.secret_repo.create_from.return_value = self.secret_model
         self.setup_secret_repository_mock(self.secret_repo)
-
-    def _config_get_project_secret_repository(self):
-        """Mock the get_project_secret_repository() factory function."""
-        self.project_secret_repo = mock.MagicMock()
-        self.project_secret_repo.create_from.return_value = None
-        self.setup_project_secret_repository_mock(self.project_secret_repo)
 
     def _config_get_encrypted_datum_repository(self):
         """Mock the get_encrypted_datum_repository() factory function."""
@@ -675,7 +669,6 @@ class WhenTestingStoreCryptoStoreSecretAndDatum(TestSecretStoreBase):
 
         # Verify the repository interactions.
         self._verify_secret_repository_interactions()
-        self._verify_project_secret_repository_interactions()
         self._verify_encrypted_datum_repository_interactions()
 
     def test_with_existing_secret(self):
@@ -691,8 +684,6 @@ class WhenTestingStoreCryptoStoreSecretAndDatum(TestSecretStoreBase):
         # Verify **not** these repository interactions.
         self.assertEqual(
             self.secret_repo.create_from.call_count, 0)
-        self.assertEqual(
-            self.project_secret_repo.create_from.call_count, 0)
 
     def _verify_secret_repository_interactions(self):
         """Verify the secret repository interactions."""
@@ -701,19 +692,6 @@ class WhenTestingStoreCryptoStoreSecretAndDatum(TestSecretStoreBase):
         args, kwargs = self.secret_repo.create_from.call_args
         test_secret_model = args[0]
         self.assertEqual(self.secret_model, test_secret_model)
-
-    def _verify_project_secret_repository_interactions(self):
-        """Verify the project-secret repository interactions."""
-        self.assertEqual(
-            self.project_secret_repo.create_from.call_count, 1)
-        args, kwargs = self.project_secret_repo.create_from.call_args
-        test_project_secret_model = args[0]
-        self.assertIsInstance(test_project_secret_model, models.ProjectSecret)
-        self.assertEqual(
-            self.context.project_model.id,
-            test_project_secret_model.project_id)
-        self.assertEqual(
-            models.States.ACTIVE, test_project_secret_model.status)
 
     def _verify_encrypted_datum_repository_interactions(self):
         """Verify the encrypted datum repository interactions."""

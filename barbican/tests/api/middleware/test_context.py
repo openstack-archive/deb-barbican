@@ -1,3 +1,5 @@
+# Copyright (c) 2015 Rackspace, Inc.
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -10,41 +12,45 @@
 # implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import mock
-import webob.exc
+import oslotest.base as oslotest
 
 from barbican.api.middleware import context
-from barbican.tests import utils
 
 
-class WhenTestingBaseContextMiddleware(utils.BaseTestCase):
-
-    def setUp(self):
-        super(WhenTestingBaseContextMiddleware, self).setUp()
-
-    def test_should_raise_attribute_error(self):
-        base = context.BaseContextMiddleware(None)
-        self.assertRaises(AttributeError, base.process_response, None)
-
-
-class WhenTestingContextMiddleware(utils.BaseTestCase):
+class TestUnauthenticatedContextMiddleware(oslotest.BaseTestCase):
 
     def setUp(self):
-        super(WhenTestingContextMiddleware, self).setUp()
+        super(TestUnauthenticatedContextMiddleware, self).setUp()
+        self.app = mock.MagicMock()
+        self.middleware = context.UnauthenticatedContextMiddleware(self.app)
 
-    def test_should_raise_attribute_error(self):
-
-        middle = context.ContextMiddleware(None)
+    def test_role_defaults_to_admin(self):
         request = mock.MagicMock()
-        request.headers = {
-            'X-Service-Catalog': 'force json error'
-        }
+        request.headers = {'X-Project-Id': 'trace'}
+        request.environ = {}
 
-        exception_result = self.assertRaises(
-            webob.exc.HTTPInternalServerError,
-            middle._get_authenticated_context,
-            request)
+        with mock.patch('barbican.context.RequestContext') as rc:
+            self.middleware.process_request(request)
+            rc.assert_called_with(
+                project='trace',
+                is_admin=True,
+                user=None,
+                roles=['admin'],
+                request_id=request.request_id
+            )
 
-        self.assertEqual(
-            'Problem processing X-Service-Catalog', exception_result.message)
+    def test_role_used_from_header(self):
+        request = mock.MagicMock()
+        request.headers = {'X-Project-Id': 'trace', 'X-Roles': 'something'}
+        request.environ = {}
+
+        with mock.patch('barbican.context.RequestContext') as rc:
+            self.middleware.process_request(request)
+            rc.assert_called_with(
+                project='trace',
+                is_admin=False,
+                user=None,
+                roles=['something'],
+                request_id=request.request_id
+            )

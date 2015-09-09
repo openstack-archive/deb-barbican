@@ -14,52 +14,36 @@
 #    under the License.
 import uuid
 
-from oslo_config import cfg
-from oslo_policy import policy
 import webob.exc
 
 from barbican.api import middleware as mw
+from barbican.common import config
 from barbican.common import utils
 import barbican.context
 from barbican import i18n as u
-from barbican.openstack.common import jsonutils as json
 
 LOG = utils.getLogger(__name__)
-
-# TODO(jwood) Need to figure out why config is ignored in this module.
-context_opts = [
-    cfg.BoolOpt('owner_is_project', default=True,
-                help=u._('When true, this option sets the owner of an image '
-                         'to be the project. Otherwise, the owner of the '
-                         ' image will be the authenticated user issuing the '
-                         'request.')),
-    cfg.StrOpt('admin_role', default='admin',
-               help=u._('Role used to identify an authenticated user as '
-                        'administrator.')),
-    cfg.BoolOpt('allow_anonymous_access', default=False,
-                help=u._('Allow unauthenticated users to access the API with '
-                         'read-only privileges. This only applies when using '
-                         'ContextMiddleware.')),
-]
-
-
-CONF = cfg.CONF
-CONF.register_opts(context_opts)
+CONF = config.CONF
 
 
 class BaseContextMiddleware(mw.Middleware):
-    def process_response(self, resp):
-        request_id = resp.request.headers.get('x-openstack-request-id')
+    def process_request(self, req):
+        request_id = req.headers.get('x-openstack-request-id')
         if not request_id:
-            request_id = b'req-{0}'.format(str(uuid.uuid4()))
+            request_id = b'req-' + str(uuid.uuid4()).encode('ascii')
+        setattr(req, 'request_id', request_id)
 
-        resp.headers['x-openstack-request-id'] = request_id
+    def process_response(self, resp):
+
+        resp.headers['x-openstack-request-id'] = resp.request.request_id
+
+        LOG.info('%s: %s - %s %s', u._LI('Processed request'),
+                 resp.status, resp.request.method, resp.request.url)
         return resp
 
 
 class ContextMiddleware(BaseContextMiddleware):
     def __init__(self, app):
-        self.policy_enforcer = policy.Enforcer(CONF)
         super(ContextMiddleware, self).__init__(app)
 
     def process_request(self, req):
@@ -74,6 +58,8 @@ class ContextMiddleware(BaseContextMiddleware):
                                             header is not 'Confirmed' and
                                             anonymous access is disallowed
         """
+        super(ContextMiddleware, self).process_request(req)
+
         if req.headers.get('X-Identity-Status') == 'Confirmed':
             req.context = self._get_authenticated_context(req)
             LOG.debug("==== Inserted barbican auth "
@@ -91,11 +77,9 @@ class ContextMiddleware(BaseContextMiddleware):
     def _get_anonymous_context(self):
         kwargs = {
             'user': None,
-            'project': None,
-            'roles': [],
+            'tenant': None,
             'is_admin': False,
             'read_only': True,
-            'policy_enforcer': self.policy_enforcer,
         }
         return barbican.context.RequestContext(**kwargs)
 
@@ -109,26 +93,21 @@ class ContextMiddleware(BaseContextMiddleware):
         # NOTE(mkbhanda): keeping this just-in-case for swift
         deprecated_token = req.headers.get('X-Storage-Token')
 
-        service_catalog = None
-        if req.headers.get('X-Service-Catalog') is not None:
-            try:
-                catalog_header = req.headers.get('X-Service-Catalog')
-                service_catalog = json.loads(catalog_header)
-            except ValueError:
-                msg = u._('Problem processing X-Service-Catalog')
-                LOG.exception(msg)
-                raise webob.exc.HTTPInternalServerError(msg)
-
         kwargs = {
+            'auth_token': req.headers.get('X-Auth-Token', deprecated_token),
             'user': req.headers.get('X-User-Id'),
             'project': req.headers.get('X-Project-Id'),
             'roles': roles,
             'is_admin': CONF.admin_role.strip().lower() in roles,
-            'auth_tok': req.headers.get('X-Auth-Token', deprecated_token),
-            'owner_is_project': CONF.owner_is_project,
-            'service_catalog': service_catalog,
-            'policy_enforcer': self.policy_enforcer,
+            'request_id': req.request_id
         }
+
+        if req.headers.get('X-Domain-Id'):
+            kwargs['domain'] = req.headers['X-Domain-Id']
+        if req.headers.get('X-User-Domain-Id'):
+            kwargs['user_domain'] = req.headers['X-User-Domain-Id']
+        if req.headers.get('X-Project-Domain-Id'):
+            kwargs['project_domain'] = req.headers['X-Project-Domain-Id']
 
         return barbican.context.RequestContext(**kwargs)
 
@@ -146,15 +125,26 @@ class UnauthenticatedContextMiddleware(BaseContextMiddleware):
 
     def process_request(self, req):
         """Create a context without an authorized user."""
+        super(UnauthenticatedContextMiddleware, self).process_request(req)
+
         project_id = self._get_project_id_from_header(req)
+
+        config_admin_role = CONF.admin_role.strip().lower()
+        roles_header = req.headers.get('X-Roles', '')
+        roles = [r.strip().lower() for r in roles_header.split(',') if r]
+
+        # If a role wasn't specified we default to admin
+        if not roles:
+            roles = [config_admin_role]
 
         kwargs = {
             'user': None,
             'project': project_id,
-            'roles': [],
-            'is_admin': True
+            'roles': roles,
+            'is_admin': config_admin_role in roles,
+            'request_id': req.request_id
         }
 
         context = barbican.context.RequestContext(**kwargs)
-        context.policy_enforcer = None
+
         req.environ['barbican.context'] = context

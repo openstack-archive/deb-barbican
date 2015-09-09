@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import datetime
+import unittest
 
 from barbican.common import exception
 from barbican.model import models
@@ -180,10 +181,12 @@ class WhenCreatingNewConsumer(utils.BaseTestCase):
         super(WhenCreatingNewConsumer, self).setUp()
         self.parsed_consumer = {'name': 'name',
                                 'URL': 'URL'}
+        self.project_id = '12345project'
         self.container_id = '12345container'
 
     def test_new_consumer_is_created_from_dict(self):
         consumer = models.ContainerConsumerMetadatum(self.container_id,
+                                                     self.project_id,
                                                      self.parsed_consumer)
         self.assertEqual(consumer.name, self.parsed_consumer['name'])
         self.assertEqual(consumer.URL, self.parsed_consumer['URL'])
@@ -191,12 +194,14 @@ class WhenCreatingNewConsumer(utils.BaseTestCase):
 
     def test_new_consumer_has_correct_hash(self):
         consumer_one = models.ContainerConsumerMetadatum(self.container_id,
+                                                         self.project_id,
                                                          self.parsed_consumer)
         consumer_two = models.ContainerConsumerMetadatum(self.container_id,
+                                                         self.project_id,
                                                          self.parsed_consumer)
         different_container = '67890container'
         consumer_three = models.ContainerConsumerMetadatum(
-            different_container, self.parsed_consumer)
+            different_container, self.project_id, self.parsed_consumer)
         self.assertEqual(consumer_one.data_hash, consumer_two.data_hash)
         self.assertNotEqual(consumer_one.data_hash, consumer_three.data_hash)
 
@@ -329,24 +334,24 @@ class WhenCreatingNewSecretACL(utils.BaseTestCase):
         self.secret_id = 'secret123456'
         self.user_ids = ['user12345', 'user67890']
         self.operation = 'read'
-        self.creator_only = False
+        self.project_access = True
 
     def test_new_secretacl_for_given_all_input(self):
         acl = models.SecretACL(self.secret_id, self.operation,
-                               self.creator_only, self.user_ids)
+                               self.project_access, self.user_ids)
         self.assertEqual(self.secret_id, acl.secret_id)
         self.assertEqual(self.operation, acl.operation)
-        self.assertEqual(self.creator_only, acl.creator_only)
+        self.assertEqual(self.project_access, acl.project_access)
         self.assertTrue(all(acl_user.user_id in self.user_ids for acl_user
                             in acl.acl_users))
 
     def test_new_secretacl_check_to_dict_fields(self):
         acl = models.SecretACL(self.secret_id, self.operation,
-                               self.creator_only, self.user_ids)
+                               self.project_access, self.user_ids)
         self.assertEqual(self.secret_id, acl.to_dict_fields()['secret_id'])
         self.assertEqual(self.operation, acl.to_dict_fields()['operation'])
-        self.assertEqual(self.creator_only,
-                         acl.to_dict_fields()['creator_only'])
+        self.assertEqual(self.project_access,
+                         acl.to_dict_fields()['project_access'])
         self.assertTrue(all(user_id in self.user_ids for user_id in
                             acl.to_dict_fields()['users']))
         self.assertEqual(None, acl.to_dict_fields()['acl_id'])
@@ -357,7 +362,7 @@ class WhenCreatingNewSecretACL(utils.BaseTestCase):
         self.assertEqual(acl.secret_id, self.secret_id)
         self.assertEqual(0, len(acl.acl_users))
         self.assertEqual(self.operation, acl.operation)
-        self.assertEqual(None, acl.creator_only)
+        self.assertEqual(None, acl.project_access)
 
     def test_new_secretacl_with_duplicate_userids_input(self):
         user_ids = list(self.user_ids)
@@ -366,7 +371,7 @@ class WhenCreatingNewSecretACL(utils.BaseTestCase):
                                None, user_ids=user_ids)
         self.assertEqual(self.secret_id, acl.secret_id)
         self.assertEqual(self.operation, acl.operation)
-        self.assertEqual(None, acl.creator_only)
+        self.assertEqual(None, acl.project_access)
         self.assertEqual(2, len(acl.acl_users))
 
     def test_should_throw_exception_missing_secret_id(self):
@@ -391,25 +396,25 @@ class WhenCreatingNewContainerACL(utils.BaseTestCase):
         self.container_id = 'container123456'
         self.user_ids = ['user12345', 'user67890']
         self.operation = 'read'
-        self.creator_only = False
+        self.project_access = True
 
     def test_new_containeracl_for_given_all_input(self):
         acl = models.ContainerACL(self.container_id, self.operation,
-                                  self.creator_only, self.user_ids)
+                                  self.project_access, self.user_ids)
         self.assertEqual(acl.container_id, self.container_id)
         self.assertEqual(acl.operation, self.operation)
-        self.assertEqual(acl.creator_only, self.creator_only)
+        self.assertEqual(acl.project_access, self.project_access)
         self.assertTrue(all(acl_user.user_id in self.user_ids for acl_user
                             in acl.acl_users))
 
     def test_new_containeracl_check_to_dict_fields(self):
         acl = models.ContainerACL(self.container_id, self.operation,
-                                  self.creator_only, self.user_ids)
+                                  self.project_access, self.user_ids)
         self.assertEqual(self.container_id,
                          acl.to_dict_fields()['container_id'])
         self.assertEqual(self.operation, acl.to_dict_fields()['operation'])
-        self.assertEqual(self.creator_only,
-                         acl.to_dict_fields()['creator_only'])
+        self.assertEqual(self.project_access,
+                         acl.to_dict_fields()['project_access'])
         self.assertTrue(all(user_id in self.user_ids for user_id
                             in acl.to_dict_fields()['users']))
         self.assertEqual(None, acl.to_dict_fields()['acl_id'])
@@ -420,7 +425,7 @@ class WhenCreatingNewContainerACL(utils.BaseTestCase):
         self.assertEqual(self.container_id, acl.container_id)
         self.assertEqual(0, len(acl.acl_users))
         self.assertEqual(self.operation, acl.operation)
-        self.assertEqual(None, acl.creator_only)
+        self.assertEqual(None, acl.project_access)
 
     def test_new_containeracl_with_duplicate_userids_input(self):
         user_ids = list(self.user_ids)
@@ -429,7 +434,7 @@ class WhenCreatingNewContainerACL(utils.BaseTestCase):
                                   True, user_ids=user_ids)
         self.assertEqual(self.container_id, acl.container_id)
         self.assertEqual(self.operation, acl.operation)
-        self.assertEqual(True, acl.creator_only)
+        self.assertEqual(True, acl.project_access)
         self.assertEqual(2, len(acl.acl_users))
 
     def test_should_throw_exception_missing_container_id(self):
@@ -506,3 +511,93 @@ class WhenCreatingNewContainerACLUser(utils.BaseTestCase):
         self.assertRaises(exception.MissingArgumentError,
                           models.ContainerACLUser, self.container_acl_id,
                           None)
+
+
+class WhenCreatingNewProjectQuotas(utils.BaseTestCase):
+    def setUp(self):
+        super(WhenCreatingNewProjectQuotas, self).setUp()
+
+    def test_create_new_project_quotas(self):
+        project = models.Project()
+        project.id = '12345'
+        project.external_id = '67890'
+        parsed_project_quotas = {
+            'secrets': 101,
+            'orders': 102,
+            'containers': 103,
+            'transport_keys': 104,
+            'consumers': 105}
+        project_quotas = models.ProjectQuotas(project.id,
+                                              parsed_project_quotas)
+
+        self.assertEqual('12345', project_quotas.project_id)
+        self.assertEqual(101, project_quotas.secrets)
+        self.assertEqual(102, project_quotas.orders)
+        self.assertEqual(103, project_quotas.containers)
+        self.assertEqual(104, project_quotas.transport_keys)
+        self.assertEqual(105, project_quotas.consumers)
+
+    def test_create_new_project_quotas_with_all_default_quotas(self):
+        project = models.Project()
+        project.id = '12345'
+        project.external_id = '67890'
+        project_quotas = models.ProjectQuotas(project.id,
+                                              None)
+
+        self.assertEqual('12345', project_quotas.project_id)
+        self.assertEqual(None, project_quotas.secrets)
+        self.assertEqual(None, project_quotas.orders)
+        self.assertEqual(None, project_quotas.containers)
+        self.assertEqual(None, project_quotas.transport_keys)
+        self.assertEqual(None, project_quotas.consumers)
+
+    def test_create_new_project_quotas_with_some_default_quotas(self):
+        project = models.Project()
+        project.id = '12345'
+        project.external_id = '67890'
+        parsed_project_quotas = {
+            'secrets': 101,
+            'containers': 103,
+            'consumers': 105}
+        project_quotas = models.ProjectQuotas(project.id,
+                                              parsed_project_quotas)
+
+        self.assertEqual('12345', project_quotas.project_id)
+        self.assertEqual(101, project_quotas.secrets)
+        self.assertEqual(None, project_quotas.orders)
+        self.assertEqual(103, project_quotas.containers)
+        self.assertEqual(None, project_quotas.transport_keys)
+        self.assertEqual(105, project_quotas.consumers)
+
+    def test_should_throw_exception_missing_project_id(self):
+        self.assertRaises(exception.MissingArgumentError,
+                          models.ProjectQuotas, None, None)
+
+    def test_project_quotas_check_to_dict_fields(self):
+        project = models.Project()
+        project.id = '12345'
+        project.external_id = '67890'
+        parsed_project_quotas = {
+            'secrets': 101,
+            'orders': 102,
+            'containers': 103,
+            'transport_keys': 104,
+            'consumers': 105}
+        project_quotas = models.ProjectQuotas(project.id,
+                                              parsed_project_quotas)
+        self.assertEqual(project.id,
+                         project_quotas.to_dict_fields()['project_id'])
+        self.assertEqual(101,
+                         project_quotas.to_dict_fields()['secrets'])
+        self.assertEqual(102,
+                         project_quotas.to_dict_fields()['orders'])
+        self.assertEqual(103,
+                         project_quotas.to_dict_fields()['containers'])
+        self.assertEqual(104,
+                         project_quotas.to_dict_fields()['transport_keys'])
+        self.assertEqual(105,
+                         project_quotas.to_dict_fields()['consumers'])
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -17,16 +17,9 @@
 Barbican exception subclasses
 """
 
-import urlparse
-
 from barbican import i18n as u
 
 _FATAL_EXCEPTION_FORMAT_ERRORS = False
-
-
-class RedirectException(Exception):
-    def __init__(self, url):
-        self.url = urlparse.urlparse(url)
 
 
 class BarbicanException(Exception):
@@ -364,7 +357,8 @@ class InvalidObject(BarbicanHTTPException):
         self.message = u._("Failed to validate JSON information: ")
         self.client_message = u._("Provided object does not match "
                                   "schema '{schema}': "
-                                  "{reason}").format(*args, **kwargs)
+                                  "{reason}. Invalid property: "
+                                  "'{property}'").format(*args, **kwargs)
         self.message = self.message + self.client_message
         super(InvalidObject, self).__init__(*args, **kwargs)
 
@@ -437,3 +431,17 @@ class CANotDefinedForProject(BarbicanHTTPException):
     client_message = u._("The ca_id provided in the request is not defined "
                          "for this project")
     status_code = 403
+
+
+class QuotaReached(BarbicanHTTPException):
+    message = u._("Quota reached for project %(external_project_id)s. Only "
+                  "%(quota)s %(resource_type)s are allowed.")
+    client_message = u._("Creation not allowed because a quota has "
+                         "been reached")
+    status_code = 403
+
+    def __init__(self, *args, **kwargs):
+        super(QuotaReached, self).__init__(*args, **kwargs)
+        self.external_project_id = kwargs.get('external_project_id')
+        self.quota = kwargs.get('quota')
+        self.resource_type = kwargs.get('resource_type')

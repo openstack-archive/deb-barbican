@@ -22,6 +22,7 @@ import time
 from testtools import testcase
 
 from barbican.plugin.util import translations
+from barbican.tests import keys
 from barbican.tests import utils
 from functionaltests.api import base
 from functionaltests.api.v1.behaviors import secret_behaviors
@@ -38,9 +39,9 @@ def get_private_key_req():
             'payload_content_type': 'application/octet-stream',
             'payload_content_encoding': 'base64',
             'algorithm': 'rsa',
-            'bit_length': 1024,
+            'bit_length': 2048,
             'secret_type': 'private',
-            'payload': base64.b64encode(utils.get_private_key())}
+            'payload': base64.b64encode(keys.get_private_key_pem())}
 
 
 def get_public_key_req():
@@ -48,9 +49,9 @@ def get_public_key_req():
             'payload_content_type': 'application/octet-stream',
             'payload_content_encoding': 'base64',
             'algorithm': 'rsa',
-            'bit_length': 1024,
+            'bit_length': 2048,
             'secret_type': 'public',
-            'payload': base64.b64encode(utils.get_public_key())}
+            'payload': base64.b64encode(keys.get_public_key_pem())}
 
 
 def get_certificate_req():
@@ -58,9 +59,9 @@ def get_certificate_req():
             'payload_content_type': 'application/octet-stream',
             'payload_content_encoding': 'base64',
             'algorithm': 'rsa',
-            'bit_length': 1024,
+            'bit_length': 2048,
             'secret_type': 'certificate',
-            'payload': base64.b64encode(utils.get_certificate())}
+            'payload': base64.b64encode(keys.get_certificate_pem())}
 
 
 def get_passphrase_req():
@@ -84,7 +85,7 @@ def get_default_data():
 
 
 def get_default_payload():
-    return "gF6+lLoF3ohA9aPRpt+6bQ=="
+    return "AQIDBAUGBwgBAgMEBQYHCAECAwQFBgcIAQIDBAUGBwg="
 
 
 @utils.parameterized_test_case
@@ -179,6 +180,25 @@ class SecretsTestCase(base.TestCase):
         """
         resp = self.behaviors.get_secret_metadata('not_a_uuid')
         self.assertEqual(resp.status_code, 404)
+
+    @testcase.attr('positive')
+    def test_secret_get_payload_no_accept_header(self):
+        """GET a secret payload, do not pass in accept header.
+
+        Should return a 200.
+        """
+        test_model = secret_models.SecretModel(
+            **self.default_secret_create_data)
+
+        resp, secret_ref = self.behaviors.create_secret(test_model)
+        self.assertEqual(resp.status_code, 201)
+
+        get_resp = self.behaviors.get_secret(
+            secret_ref,
+            payload_content_type='')
+        self.assertEqual(get_resp.status_code, 200)
+        self.assertIn(test_model.payload,
+                      binascii.b2a_base64(get_resp.content))
 
     @testcase.attr('negative')
     def test_secret_delete_doesnt_exist(self):
@@ -813,7 +833,8 @@ class SecretsTestCase(base.TestCase):
         'array': [['boom']],
         'int': [123],
         'none': [None],
-        'bad_character': ['\u0080']
+        'bad_character': [unichr(0x0080)],
+        'bad_characters': [unichr(0x1111) + unichr(0xffff)]
     })
     @testcase.attr('negative')
     def test_secret_create_defaults_invalid_payload(self, payload):
@@ -902,13 +923,13 @@ class SecretsTestCase(base.TestCase):
                           get_default_payload()),
                       get_default_data()],
         'private': ['private',
-                    utils.get_private_key(),
+                    keys.get_private_key_pem(),
                     get_private_key_req()],
         'public': ['public',
-                   utils.get_public_key(),
+                   keys.get_public_key_pem(),
                    get_public_key_req()],
         'certificate': ['certificate',
-                        utils.get_certificate(),
+                        keys.get_certificate_pem(),
                         get_certificate_req()],
         'passphrase': ['passphrase',
                        'mysecretpassphrase',
@@ -1010,6 +1031,341 @@ class SecretsPagingTestCase(base.PagingTestCase):
         for x in range(0, count):
             self.behaviors.create_secret(model)
 
-    def get_resources(self, limit=10, offset=0, name_filter=""):
+    def get_resources(self, limit=10, offset=0, filter=None):
         return self.behaviors.get_secrets(limit=limit, offset=offset,
-                                          name_filter=name_filter)
+                                          filter=filter)
+
+    def set_filter_field(self, unique_str, model):
+        '''Set the name field which we use in the get_resources '''
+        model.name = unique_str
+
+
+class SecretsUnauthedTestCase(base.TestCase):
+
+    def setUp(self):
+        super(SecretsUnauthedTestCase, self).setUp()
+        self.behaviors = secret_behaviors.SecretBehaviors(self.client)
+        self.default_secret_create_data = get_default_data()
+        self.dummy_secret_ref = 'orders/dummy-7b86-4071-935d-ef6b83729200'
+        self.dummy_project_id = 'dummy'
+
+        resp, self.real_secret_ref = self.behaviors.create_secret(
+            secret_models.SecretModel(**self.default_secret_create_data)
+        )
+
+        stored_auth = self.client._auth[
+            self.client._default_user_name].stored_auth
+        project_id = stored_auth.values()[0]['project_id']
+        self.project_id_header = {
+            'X-Project-Id': project_id
+        }
+        self.dummy_project_id_header = {
+            'X-Project-Id': self.dummy_project_id
+        }
+
+    def tearDown(self):
+        self.behaviors.delete_all_created_secrets()
+        super(SecretsUnauthedTestCase, self).tearDown()
+
+    @testcase.attr('negative', 'security')
+    def test_secret_create_unauthed_no_proj_id(self):
+        """Attempt to create a secret without a token or project id
+
+        Should return 401
+        """
+
+        model = secret_models.SecretModel(self.default_secret_create_data)
+        resp, secret_ref = self.behaviors.create_secret(model, use_auth=False)
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_create_unauthed_fake_proj_id(self):
+        """Attempt to create a secret with a project id but no token
+
+        Should return 401
+        """
+
+        model = secret_models.SecretModel(self.default_secret_create_data)
+
+        resp, secret_ref = self.behaviors.create_secret(
+            model, headers=self.dummy_project_id_header, use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_create_unauthed_real_proj_id(self):
+        """Attempt to create a secret with a project id but no token
+
+        Should return 401
+        """
+
+        model = secret_models.SecretModel(self.default_secret_create_data)
+
+        resp, secret_ref = self.behaviors.create_secret(
+            model, headers=self.project_id_header, use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_get_unauthed_no_proj_id_fake_secret(self):
+        """Attempt to read a non-existant secret without a token or project id
+
+        Should return 401
+        """
+
+        resp = self.behaviors.get_secret(
+            self.dummy_secret_ref,
+            payload_content_type='application/octet-stream',
+            payload_content_encoding='base64', use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_get_unauthed_no_proj_id_real_secret(self):
+        """Attempt to read an existing secret without a token or project id
+
+        Should return 401
+        """
+
+        resp = self.behaviors.get_secret(
+            self.real_secret_ref,
+            payload_content_type='application/octet-stream',
+            payload_content_encoding='base64', use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_get_unauthed_fake_proj_id_fake_secret(self):
+        """Attempt to get a non-existant secret with a project id but no token
+
+        Should return 401
+        """
+
+        resp = self.behaviors.get_secret(
+            self.dummy_secret_ref,
+            payload_content_type='application/octet-stream',
+            payload_content_encoding='base64',
+            extra_headers=self.dummy_project_id_header,
+            use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_get_unauthed_fake_proj_id_real_secret(self):
+        """Attempt to get an existing secret with a project id but no token
+
+        Should return 401
+        """
+
+        resp = self.behaviors.get_secret(
+            self.real_secret_ref,
+            payload_content_type='application/octet-stream',
+            payload_content_encoding='base64',
+            extra_headers=self.dummy_project_id_header,
+            use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_get_unauthed_real_proj_id_fake_secret(self):
+        """Attempt to get a non-existant secret with a project id but no token
+
+        Should return 401
+        """
+
+        resp = self.behaviors.get_secret(
+            self.dummy_secret_ref,
+            payload_content_type='application/octet-stream',
+            payload_content_encoding='base64',
+            extra_headers=self.project_id_header,
+            use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_get_unauthed_real_proj_id_real_secret(self):
+        """Attempt to get an existing secret with a project id but no token
+
+        Should return 401
+        """
+
+        resp = self.behaviors.get_secret(
+            self.real_secret_ref,
+            payload_content_type='application/octet-stream',
+            payload_content_encoding='base64',
+            extra_headers=self.project_id_header,
+            use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_put_unauthed_no_proj_id_fake_secret(self):
+        """Attempt to update a non-existant secret without a token or project id
+
+        Should return 401
+        """
+
+        resp = self.behaviors.update_secret_payload(
+            self.dummy_secret_ref, payload=None,
+            payload_content_type='application/octet-stream',
+            payload_content_encoding='base64', use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_put_unauthed_no_proj_id_real_secret(self):
+        """Attempt to update an existing secret without a token or project id
+
+        Should return 401
+        """
+
+        resp = self.behaviors.update_secret_payload(
+            self.real_secret_ref, payload=None,
+            payload_content_type='application/octet-stream',
+            payload_content_encoding='base64', use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_put_unauthed_fake_proj_id_fake_secret(self):
+        """Attempt to update a non-existant secret with a project id, but no token
+
+        Should return 401
+        """
+
+        resp = self.behaviors.update_secret_payload(
+            self.dummy_secret_ref, payload=None,
+            payload_content_type='application/octet-stream',
+            payload_content_encoding='base64',
+            extra_headers=self.dummy_project_id_header,
+            use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_put_unauthed_fake_proj_id_real_secret(self):
+        """Attempt to update an existing secret with a project id, but no token
+
+        Should return 401
+        """
+
+        resp = self.behaviors.update_secret_payload(
+            self.real_secret_ref, payload=None,
+            payload_content_type='application/octet-stream',
+            payload_content_encoding='base64',
+            extra_headers=self.dummy_project_id_header,
+            use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_put_unauthed_real_proj_id_fake_secret(self):
+        """Attempt to update a non-existant secret with a project id, but no token
+
+        Should return 401
+        """
+
+        resp = self.behaviors.update_secret_payload(
+            self.dummy_secret_ref, payload=None,
+            payload_content_type='application/octet-stream',
+            payload_content_encoding='base64',
+            extra_headers=self.project_id_header,
+            use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_put_unauthed_real_proj_id_real_secret(self):
+        """Attempt to update an existing secret with a project id, but no token
+
+        Should return 401
+        """
+
+        resp = self.behaviors.update_secret_payload(
+            self.real_secret_ref, payload=None,
+            payload_content_type='application/octet-stream',
+            payload_content_encoding='base64',
+            extra_headers=self.project_id_header,
+            use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_delete_unauthed_no_proj_id_fake_secret(self):
+        """Attempt to delete a non-existant secret without a token or project id
+
+        Should return 401
+        """
+
+        resp = self.behaviors.delete_secret(
+            self.dummy_secret_ref, expected_fail=True, use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_delete_unauthed_no_proj_id_real_secret(self):
+        """Attempt to delete an existing secret without a token or project id
+
+        Should return 401
+        """
+
+        resp = self.behaviors.delete_secret(
+            self.real_secret_ref, expected_fail=True, use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_delete_unauthed_fake_proj_id_fake_secret(self):
+        """Attempt to delete a non-existant secret with a project id, but no token
+
+        Should return 401
+        """
+
+        resp = self.behaviors.delete_secret(
+            self.dummy_secret_ref,
+            extra_headers=self.dummy_project_id_header, expected_fail=True,
+            use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_delete_unauthed_fake_proj_id_real_secret(self):
+        """Attempt to delete an existing secret with a project id, but no token
+
+        Should return 401
+        """
+
+        resp = self.behaviors.delete_secret(
+            self.real_secret_ref,
+            extra_headers=self.dummy_project_id_header, expected_fail=True,
+            use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_delete_unauthed_real_proj_id_fake_secret(self):
+        """Attempt to delete a non-existant secret with a project id, but no token
+
+        Should return 401
+        """
+
+        resp = self.behaviors.delete_secret(
+            self.dummy_secret_ref,
+            extra_headers=self.project_id_header, expected_fail=True,
+            use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)
+
+    @testcase.attr('negative', 'security')
+    def test_secret_delete_unauthed_real_proj_id_real_secret(self):
+        """Attempt to delete an existing secret with a project id, but no token
+
+        Should return 401
+        """
+
+        resp = self.behaviors.delete_secret(
+            self.real_secret_ref,
+            extra_headers=self.project_id_header, expected_fail=True,
+            use_auth=False
+        )
+        self.assertEqual(401, resp.status_code)

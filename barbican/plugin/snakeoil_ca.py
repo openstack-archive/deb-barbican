@@ -13,17 +13,19 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import base64
 import os
 import uuid
 
 from OpenSSL import crypto
-from oslo.config import cfg
+from oslo_config import cfg
 
+from barbican.common import config
 from barbican.common import utils
-from barbican.openstack.common import gettextutils as u
+from barbican import i18n as u
 import barbican.plugin.interface.certificate_manager as cert_manager
 
-CONF = cfg.CONF
+CONF = config.new_config()
 LOG = utils.getLogger(__name__)
 
 
@@ -39,6 +41,7 @@ snakeoil_ca_plugin_opts = [
 
 CONF.register_group(snakeoil_ca_plugin_group)
 CONF.register_opts(snakeoil_ca_plugin_opts, group=snakeoil_ca_plugin_group)
+config.parse_args(CONF)
 
 
 class SnakeoilCA(object):
@@ -177,7 +180,8 @@ class SnakeoilCACertificatePlugin(cert_manager.CertificatePluginBase):
     """
 
     def __init__(self, conf=CONF):
-        self.ca = SnakeoilCA(conf.ca_cert_path, conf.ca_cert_key_path)
+        self.ca = SnakeoilCA(conf.snakeoil_ca_plugin.ca_cert_path,
+                             conf.snakeoil_ca_plugin.ca_cert_key_path)
         self.cert_manager = CertManager(self.ca)
 
     def get_default_ca_name(self):
@@ -189,14 +193,21 @@ class SnakeoilCACertificatePlugin(cert_manager.CertificatePluginBase):
     def get_default_intermediates(self):
         return None
 
+    def supported_request_types(self):
+        return [cert_manager.CertificateRequestType.CUSTOM_REQUEST,
+                cert_manager.CertificateRequestType.STORED_KEY_REQUEST]
+
     def issue_certificate_request(self, order_id, order_meta, plugin_meta,
                                   barbican_meta_dto):
-        try:
-            encoded_csr = order_meta['request_data']
-        except KeyError:
-            return cert_manager.ResultDTO(
-                cert_manager.CertificateStatus.CLIENT_DATA_ISSUE_SEEN,
-                status_message="No request_data specified")
+        if barbican_meta_dto.generated_csr is not None:
+            encoded_csr = barbican_meta_dto.generated_csr
+        else:
+            try:
+                encoded_csr = order_meta['request_data']
+            except KeyError:
+                return cert_manager.ResultDTO(
+                    cert_manager.CertificateStatus.CLIENT_DATA_ISSUE_SEEN,
+                    status_message=u._("No request_data specified"))
         csr = crypto.load_certificate_request(crypto.FILETYPE_PEM, encoded_csr)
         cert = self.cert_manager.make_certificate(csr)
         cert_enc = crypto.dump_certificate(crypto.FILETYPE_PEM, cert)
@@ -204,8 +215,8 @@ class SnakeoilCACertificatePlugin(cert_manager.CertificatePluginBase):
 
         return cert_manager.ResultDTO(
             cert_manager.CertificateStatus.CERTIFICATE_GENERATED,
-            certificate=cert_enc,
-            intermediates=ca_enc)
+            certificate=base64.b64encode(cert_enc),
+            intermediates=base64.b64encode(ca_enc))
 
     def modify_certificate_request(self, order_id, order_meta, plugin_meta,
                                    barbican_meta_dto):
@@ -220,4 +231,7 @@ class SnakeoilCACertificatePlugin(cert_manager.CertificatePluginBase):
         raise NotImplementedError
 
     def supports(self, certificate_spec):
-        raise NotImplementedError
+        request_type = certificate_spec.get(
+            cert_manager.REQUEST_TYPE,
+            cert_manager.CertificateRequestType.CUSTOM_REQUEST)
+        return request_type in self.supported_request_types()

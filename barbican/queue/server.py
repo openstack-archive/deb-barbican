@@ -26,13 +26,13 @@ try:
 except ImportError:
     newrelic_loaded = False
 
-from oslo_config import cfg
+from oslo_service import service
 
+from barbican.common import config
 from barbican.common import utils
 from barbican import i18n as u
 from barbican.model import models
 from barbican.model import repositories
-from barbican.openstack.common import service
 from barbican import queue
 from barbican.tasks import common
 from barbican.tasks import resources
@@ -42,7 +42,7 @@ if newrelic_loaded:
 
 LOG = utils.getLogger(__name__)
 
-CONF = cfg.CONF
+CONF = config.CONF
 
 
 # Maps the common/shared RetryTasks (returned from lower-level business logic
@@ -50,6 +50,11 @@ CONF = cfg.CONF
 MAP_RETRY_TASKS = {
     common.RetryTasks.INVOKE_CERT_STATUS_CHECK_TASK: 'check_certificate_status'
 }
+
+
+def find_function_name(func, if_no_name=None):
+    """Returns pretty-formatted function name."""
+    return getattr(func, '__name__', if_no_name)
 
 
 def retryable_order(fn):
@@ -64,6 +69,10 @@ def retryable_order(fn):
             LOG.info(
                 u._LI("Scheduled RPC method for retry: '%s'"),
                 retry_rpc_method)
+        else:
+            LOG.info(
+                u._LI("Task '%s' did not have to be retried"),
+                find_function_name(fn, if_no_name='???'))
 
     return wrapper
 
@@ -73,7 +82,7 @@ def transactional(fn):
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
-        fn_name = getattr(fn, '__name__', '????')
+        fn_name = find_function_name(fn, if_no_name='???')
 
         if not queue.is_server_side():
             # Non-server mode directly invokes tasks.
@@ -84,7 +93,9 @@ def transactional(fn):
             try:
                 fn(*args, **kwargs)
                 repositories.commit()
-                LOG.info(u._LI("Completed worker task: '%s'"), fn_name)
+                LOG.info(
+                    u._LI("Completed worker task (post-commit): '%s'"),
+                    fn_name)
             except Exception:
                 """NOTE: Wrapped functions must process with care!
 
@@ -158,8 +169,7 @@ def schedule_order_retry_tasks(
 
     elif common.RetryTasks.INVOKE_SAME_TASK == retry_result.retry_task:
         if invoked_task:
-            retry_rpc_method = getattr(
-                invoked_task, '__name__', None)
+            retry_rpc_method = find_function_name(invoked_task)
 
     else:
         retry_rpc_method = MAP_RETRY_TASKS.get(retry_result.retry_task)
@@ -203,37 +213,42 @@ class Tasks(object):
     @monitored
     @transactional
     @retryable_order
-    def process_type_order(self, context, order_id, project_id):
+    def process_type_order(self, context, order_id, project_id, request_id):
         """Process TypeOrder."""
-        LOG.info(
-            u._LI("Processing type order: order ID is '%s'"),
-            order_id
+        message = u._LI(
+            "Processing type order:  "
+            "order ID is '%(order)s' and request ID is '%(request)s'"
         )
+        LOG.info(message, {'order': order_id, 'request': request_id})
         return resources.BeginTypeOrder().process_and_suppress_exceptions(
             order_id, project_id)
 
     @monitored
     @transactional
     @retryable_order
-    def update_order(self, context, order_id, project_id, updated_meta):
+    def update_order(self, context, order_id, project_id,
+                     updated_meta, request_id):
         """Update Order."""
-        LOG.info(
-            u._LI("Processing update order: order ID is '%s'"),
-            order_id
+        message = u._LI(
+            "Processing update order: "
+            "order ID is '%(order)s' and request ID is '%(request)s'"
         )
+        LOG.info(message, {'order': order_id, 'request': request_id})
         return resources.UpdateOrder().process_and_suppress_exceptions(
             order_id, project_id, updated_meta)
 
     @monitored
     @transactional
     @retryable_order
-    def check_certificate_status(self, context, order_id, project_id):
+    def check_certificate_status(self, context, order_id,
+                                 project_id, request_id):
         """Check the status of a certificate order."""
-        LOG.info(
-            u._LI("Processing check certificate status on order: order ID is "
-                  "'%s'"),
-            order_id
+        message = u._LI(
+            "Processing check certificate status on order: "
+            "order ID is '%(order)s' and request ID is '%(request)s'"
         )
+
+        LOG.info(message, {'order': order_id, 'request': request_id})
         check_cert_order = resources.CheckCertificateStatusOrder()
         return check_cert_order.process_and_suppress_exceptions(
             order_id, project_id)

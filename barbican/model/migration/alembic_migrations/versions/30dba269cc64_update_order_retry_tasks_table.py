@@ -10,8 +10,9 @@ Create Date: 2015-04-01 17:53:25.447919
 revision = '30dba269cc64'
 down_revision = '3041b53b95d7'
 
+from oslo_utils import timeutils
+
 from alembic import op
-from barbican.openstack.common import timeutils
 from barbican.model import models as m
 import sqlalchemy as sa
 
@@ -48,15 +49,3 @@ def upgrade():
             sa.DateTime(),
             nullable=False,
             server_default=str(timeutils.utcnow())))
-
-
-def downgrade():
-    op.drop_column('order_retry_tasks', 'created_at')
-    op.drop_column('order_retry_tasks', 'deleted')
-    op.drop_column('order_retry_tasks', 'deleted_at')
-    op.drop_column('order_retry_tasks', 'status')
-    op.drop_column('order_retry_tasks', 'updated_at')
-
-
-
-

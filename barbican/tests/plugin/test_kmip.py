@@ -29,11 +29,18 @@ from kmip.core.messages import contents
 from kmip.core import misc
 from kmip.core import objects
 from kmip.core import secrets
+from kmip.core.secrets import OpaqueObject as Opaque
 from kmip.services import kmip_client as proxy
 from kmip.services import results
-from oslo_config import cfg
 
 from barbican.plugin import kmip_secret_store as kss
+
+
+def get_sample_opaque_secret():
+    opaque_type = Opaque.OpaqueDataType(enums.OpaqueDataType.NONE)
+    opaque_value = Opaque.OpaqueDataValue(base64.b64decode(
+        utils.get_symmetric_key()))
+    return Opaque(opaque_type, opaque_value)
 
 
 def get_sample_symmetric_key():
@@ -51,11 +58,18 @@ def get_sample_symmetric_key():
     return secrets.SymmetricKey(key_block)
 
 
-def get_sample_public_key():
-    key_material = objects.KeyMaterial(keys.get_public_key_der())
+def get_sample_public_key(pkcs1=False):
+    if pkcs1:
+        public_key = kss.get_public_key_der_pkcs1(keys.get_public_key_pem())
+        key_format_type = misc.KeyFormatType(enums.KeyFormatType.PKCS_1)
+    else:
+        public_key = keys.get_public_key_der()
+        key_format_type = misc.KeyFormatType(enums.KeyFormatType.X_509)
+
+    key_material = objects.KeyMaterial(public_key)
     key_value = objects.KeyValue(key_material)
     key_block = objects.KeyBlock(
-        key_format_type=misc.KeyFormatType(enums.KeyFormatType.X_509),
+        key_format_type=key_format_type,
         key_compression_type=None,
         key_value=key_value,
         cryptographic_algorithm=attr.CryptographicAlgorithm(
@@ -65,11 +79,17 @@ def get_sample_public_key():
     return secrets.PublicKey(key_block)
 
 
-def get_sample_private_key():
-    key_material = objects.KeyMaterial(keys.get_private_key_der())
+def get_sample_private_key(pkcs1=False):
+    if pkcs1:
+        private_key = kss.get_private_key_der_pkcs1(keys.get_private_key_pem())
+        key_format_type = misc.KeyFormatType(enums.KeyFormatType.PKCS_1)
+    else:
+        private_key = keys.get_private_key_der()
+        key_format_type = misc.KeyFormatType(enums.KeyFormatType.PKCS_8)
+    key_material = objects.KeyMaterial(private_key)
     key_value = objects.KeyValue(key_material)
     key_block = objects.KeyBlock(
-        key_format_type=misc.KeyFormatType(enums.KeyFormatType.PKCS_8),
+        key_format_type=key_format_type,
         key_compression_type=None,
         key_value=key_value,
         cryptographic_algorithm=attr.CryptographicAlgorithm(
@@ -77,6 +97,12 @@ def get_sample_private_key():
         cryptographic_length=attr.CryptographicLength(2048),
         key_wrapping_data=None)
     return secrets.PrivateKey(key_block)
+
+
+def get_sample_certificate():
+    return secrets.Certificate(
+        certificate_type=enums.CertificateTypeEnum.X_509,
+        certificate_value=keys.get_certificate_der())
 
 
 @utils.parameterized_test_case
@@ -89,10 +115,11 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
         self.expected_username = "sample_username"
         self.expected_password = "sample_password"
 
-        CONF = cfg.CONF
+        CONF = kss.CONF
         CONF.kmip_plugin.username = self.expected_username
         CONF.kmip_plugin.password = self.expected_password
         CONF.kmip_plugin.keyfile = None
+        CONF.kmip_plugin.pkcs1_only = False
 
         self.secret_store = kss.KMIPSecretStore(CONF)
         self.credential = self.secret_store.credential
@@ -113,38 +140,47 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
 
         self.sample_secret = get_sample_symmetric_key()
 
-        self.secret_store.client.open = mock.MagicMock(proxy.KMIPProxy.open)
-        self.secret_store.client.close = mock.MagicMock(proxy.KMIPProxy.close)
+        self.secret_store.client.open = mock.MagicMock(proxy.KMIPProxy().open)
+        self.secret_store.client.close = mock.MagicMock(
+            proxy.KMIPProxy().close)
 
         self.secret_store.client.create = mock.MagicMock(
-            proxy.KMIPProxy.create, return_value=results.CreateResult(
+            proxy.KMIPProxy().create, return_value=results.CreateResult(
                 contents.ResultStatus(enums.ResultStatus.SUCCESS),
                 uuid=attr.UniqueIdentifier(
                     self.symmetric_key_uuid)))
 
         self.secret_store.client.create_key_pair = mock.MagicMock(
-            proxy.KMIPProxy.create_key_pair,
+            proxy.KMIPProxy().create_key_pair,
             return_value=results.CreateKeyPairResult(
                 contents.ResultStatus(enums.ResultStatus.SUCCESS),
                 private_key_uuid=attr.UniqueIdentifier(self.private_key_uuid),
                 public_key_uuid=attr.UniqueIdentifier(self.public_key_uuid)))
 
         self.secret_store.client.register = mock.MagicMock(
-            proxy.KMIPProxy.register, return_value=results.RegisterResult(
+            proxy.KMIPProxy().register, return_value=results.RegisterResult(
                 contents.ResultStatus(enums.ResultStatus.SUCCESS),
                 uuid=attr.UniqueIdentifier('uuid')))
 
         self.secret_store.client.destroy = mock.MagicMock(
-            proxy.KMIPProxy.destroy, return_value=results.DestroyResult(
+            proxy.KMIPProxy().destroy, return_value=results.DestroyResult(
                 contents.ResultStatus(enums.ResultStatus.SUCCESS)))
 
         self.secret_store.client.get = mock.MagicMock(
-            proxy.KMIPProxy.get, return_value=results.GetResult(
+            proxy.KMIPProxy().get, return_value=results.GetResult(
                 contents.ResultStatus(enums.ResultStatus.SUCCESS),
                 object_type=attr.ObjectType(enums.ObjectType.SYMMETRIC_KEY),
                 secret=self.sample_secret))
 
         self.attribute_factory = attributes.AttributeFactory()
+
+    # --------------- TEST CONFIG OPTIONS ---------------------------------
+
+    def test_enable_pkcs1_only_config_option(self):
+        CONF = kss.CONF
+        CONF.kmip_plugin.pkcs1_only = True
+        secret_store = kss.KMIPSecretStore(CONF)
+        self.assertTrue(secret_store.pkcs1_only)
 
     # --------------- TEST GENERATE_SUPPORTS ---------------------------------
 
@@ -172,14 +208,14 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
     def test_generate_supports_rsa(self):
         key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA,
                                         None, 'mode')
-        for x in [1024, 2048, 3072, 4096]:
+        for x in [2048, 3072, 4096]:
             key_spec.bit_length = x
             self.assertTrue(self.secret_store.generate_supports(key_spec))
 
     def test_generate_supports_dsa(self):
         key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.DSA,
                                         None, 'mode')
-        for x in [1024, 2048, 3072]:
+        for x in [2048, 3072]:
             key_spec.bit_length = x
             self.assertTrue(self.secret_store.generate_supports(key_spec))
 
@@ -216,7 +252,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
 
     def test_generate_symmetric_key_server_error_occurs(self):
         self.secret_store.client.create = mock.MagicMock(
-            proxy.KMIPProxy.create, return_value=results.CreateResult(
+            proxy.KMIPProxy().create, return_value=results.CreateResult(
                 contents.ResultStatus(enums.ResultStatus.OPERATION_FAILED)))
 
         key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.AES,
@@ -292,7 +328,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
 
     def test_generate_asymmetric_key_server_error_occurs(self):
         self.secret_store.client.create_key_pair = mock.MagicMock(
-            proxy.KMIPProxy.create_key_pair,
+            proxy.KMIPProxy().create_key_pair,
             return_value=results.CreateKeyPairResult(
                 contents.ResultStatus(enums.ResultStatus.OPERATION_FAILED)))
 
@@ -385,18 +421,122 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
         return_value = self.secret_store.store_secret(secret_dto)
         expected = {kss.KMIPSecretStore.KEY_UUID: 'uuid'}
 
-        self.assertEqual(0, cmp(expected, return_value))
+        self.assertEqual(expected, return_value)
 
-    def test_store_private_key_secret_assert_called(self):
-        key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 2048)
-        secret_dto = secret_store.SecretDTO(secret_store.SecretType.PRIVATE,
-                                            base64.b64encode(
-                                                keys.get_private_key_pem()),
+    def test_store_passphrase_secret_assert_called(self):
+        key_spec = secret_store.KeySpec(None, None, None)
+        passphrase = "supersecretpassphrase"
+        secret_dto = secret_store.SecretDTO(secret_store.SecretType.PASSPHRASE,
+                                            base64.b64encode(passphrase),
                                             key_spec,
-                                            'content_type')
+                                            'content_type',
+                                            transport_key=None)
         self.secret_store.store_secret(secret_dto)
         self.secret_store.client.register.assert_called_once_with(
-            object_type=enums.ObjectType.PRIVATE_KEY,
+            object_type=enums.ObjectType.SECRET_DATA,
+            template_attribute=mock.ANY,
+            secret=mock.ANY,
+            credential=self.credential)
+        _, register_call_kwargs = self.secret_store.client.register.call_args
+        actual_secret = register_call_kwargs.get('secret')
+        self.assertEqual(
+            None,
+            actual_secret.key_block.cryptographic_length)
+        self.assertEqual(
+            None,
+            actual_secret.key_block.cryptographic_algorithm)
+        self.assertEqual(
+            passphrase,
+            actual_secret.key_block.key_value.key_material.value)
+
+    def test_store_passphrase_secret_return_value(self):
+        key_spec = secret_store.KeySpec(None, None, None)
+        passphrase = "supersecretpassphrase"
+        secret_dto = secret_store.SecretDTO(secret_store.SecretType.PASSPHRASE,
+                                            base64.b64encode(passphrase),
+                                            key_spec,
+                                            'content_type',
+                                            transport_key=None)
+        return_value = self.secret_store.store_secret(secret_dto)
+        expected = {kss.KMIPSecretStore.KEY_UUID: 'uuid'}
+
+        self.assertEqual(0, cmp(expected, return_value))
+
+    def test_store_opaque_secret_assert_called(self):
+        key_spec = secret_store.KeySpec(None, None, None)
+        opaque = ('\x00\x01\x02\x03\x04\x05\x06\x07')
+        secret_dto = secret_store.SecretDTO(secret_store.SecretType.OPAQUE,
+                                            base64.b64encode(opaque),
+                                            key_spec,
+                                            'content_type',
+                                            transport_key=None)
+        self.secret_store.store_secret(secret_dto)
+        self.secret_store.client.register.assert_called_once_with(
+            object_type=enums.ObjectType.OPAQUE_DATA,
+            template_attribute=mock.ANY,
+            secret=mock.ANY,
+            credential=self.credential)
+        _, register_call_kwargs = self.secret_store.client.register.call_args
+        actual_secret = register_call_kwargs.get('secret')
+        self.assertEqual(
+            Opaque.OpaqueDataType(enums.OpaqueDataType.NONE),
+            actual_secret.opaque_data_type)
+        self.assertEqual(
+            Opaque.OpaqueDataValue(opaque),
+            actual_secret.opaque_data_value)
+
+    def test_store_opaque_secret_return_value(self):
+        key_spec = secret_store.KeySpec(None, None, None)
+        opaque = ('\x00\x01\x02\x03\x04\x05\x06\x07')
+        secret_dto = secret_store.SecretDTO(secret_store.SecretType.OPAQUE,
+                                            base64.b64encode(opaque),
+                                            key_spec,
+                                            'content_type',
+                                            transport_key=None)
+        return_value = self.secret_store.store_secret(secret_dto)
+        expected = {kss.KMIPSecretStore.KEY_UUID: 'uuid'}
+
+        self.assertEqual(0, cmp(expected, return_value))
+
+    @utils.parameterized_dataset({
+        'private_pkcs8': [secret_store.SecretType.PRIVATE,
+                          keys.get_private_key_pem(),
+                          enums.ObjectType.PRIVATE_KEY,
+                          keys.get_private_key_der(),
+                          False],
+        'private_pkcs1': [secret_store.SecretType.PRIVATE,
+                          keys.get_private_key_pem(),
+                          enums.ObjectType.PRIVATE_KEY,
+                          kss.get_private_key_der_pkcs1(
+                              keys.get_private_key_pem()),
+                          True],
+        'public_pkcs8': [secret_store.SecretType.PUBLIC,
+                         keys.get_public_key_pem(),
+                         enums.ObjectType.PUBLIC_KEY,
+                         keys.get_public_key_der(),
+                         False],
+        'public_pkcs1': [secret_store.SecretType.PUBLIC,
+                         keys.get_public_key_pem(),
+                         enums.ObjectType.PUBLIC_KEY,
+                         kss.get_public_key_der_pkcs1(
+                             keys.get_public_key_pem()),
+                         True],
+    })
+    def test_store_asymmetric_key_secret_assert_called(self,
+                                                       barbican_type,
+                                                       barbican_key,
+                                                       kmip_type,
+                                                       kmip_key,
+                                                       pkcs1_only):
+        key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 2048)
+        secret_dto = secret_store.SecretDTO(barbican_type,
+                                            base64.b64encode(barbican_key),
+                                            key_spec,
+                                            'content_type')
+        self.secret_store.pkcs1_only = pkcs1_only
+        self.secret_store.store_secret(secret_dto)
+        self.secret_store.client.register.assert_called_once_with(
+            object_type=kmip_type,
             template_attribute=mock.ANY,
             secret=mock.ANY,
             credential=self.credential)
@@ -409,24 +549,80 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
             attr.CryptographicAlgorithm(enums.CryptographicAlgorithm.RSA),
             actual_secret.key_block.cryptographic_algorithm)
         self.assertEqual(
-            keys.get_private_key_der(),
+            kmip_key,
             actual_secret.key_block.key_value.key_material.value)
 
-    def test_store_private_key_secret_return_value(self):
+    @utils.parameterized_dataset({
+        'private_pkcs8': [secret_store.SecretType.PRIVATE,
+                          keys.get_private_key_pem(),
+                          False],
+        'private_pkcs1': [secret_store.SecretType.PRIVATE,
+                          keys.get_private_key_pem(),
+                          True],
+        'public_pkcs8': [secret_store.SecretType.PUBLIC,
+                         keys.get_public_key_pem(),
+                         False],
+        'public_pkcs1': [secret_store.SecretType.PUBLIC,
+                         keys.get_public_key_pem(),
+                         True],
+    })
+    def test_store_asymmetric_key_secret_return_value(self,
+                                                      barbican_type,
+                                                      barbican_key,
+                                                      pkcs1_only):
         key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 2048)
-        secret_dto = secret_store.SecretDTO(secret_store.SecretType.PRIVATE,
-                                            base64.b64encode(
-                                                keys.get_private_key_pem()),
+        secret_dto = secret_store.SecretDTO(barbican_type,
+                                            base64.b64encode(barbican_key),
                                             key_spec,
                                             'content_type')
+        self.secret_store.pkcs1_only = pkcs1_only
         return_value = self.secret_store.store_secret(secret_dto)
         expected = {kss.KMIPSecretStore.KEY_UUID: 'uuid'}
 
-        self.assertEqual(0, cmp(expected, return_value))
+        self.assertEqual(expected, return_value)
+
+    @utils.parameterized_dataset({
+        'rsa': [secret_store.KeyAlgorithm.RSA, 2048],
+        'no_key_spec': [None, None]
+    })
+    def test_store_certificate_secret_assert_called(
+            self, algorithm, bit_length):
+        key_spec = secret_store.KeySpec(algorithm, bit_length)
+        secret_dto = secret_store.SecretDTO(
+            secret_store.SecretType.CERTIFICATE,
+            base64.b64encode(keys.get_certificate_pem()),
+            key_spec,
+            'content_type')
+        self.secret_store.store_secret(secret_dto)
+        self.secret_store.client.register.assert_called_once_with(
+            object_type=enums.ObjectType.CERTIFICATE,
+            template_attribute=mock.ANY,
+            secret=mock.ANY,
+            credential=self.credential)
+        _, register_call_kwargs = self.secret_store.client.register.call_args
+        actual_secret = register_call_kwargs.get('secret')
+        self.assertEqual(
+            enums.CertificateTypeEnum.X_509.value,
+            actual_secret.certificate_type.value)
+        self.assertEqual(
+            keys.get_certificate_der(),
+            actual_secret.certificate_value.value)
+
+    def test_store_certificate_secret_return_value(self):
+        key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA, 2048)
+        secret_dto = secret_store.SecretDTO(
+            secret_store.SecretType.CERTIFICATE,
+            base64.b64encode(keys.get_certificate_pem()),
+            key_spec,
+            'content_type')
+        return_value = self.secret_store.store_secret(secret_dto)
+        expected = {kss.KMIPSecretStore.KEY_UUID: 'uuid'}
+
+        self.assertEqual(expected, return_value)
 
     def test_store_secret_server_error_occurs(self):
         self.secret_store.client.register = mock.MagicMock(
-            proxy.KMIPProxy.register, return_value=results.RegisterResult(
+            proxy.KMIPProxy().register, return_value=results.RegisterResult(
                 contents.ResultStatus(enums.ResultStatus.OPERATION_FAILED)))
 
         key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.AES,
@@ -452,19 +648,6 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
                                             transport_key=None)
         self.assertRaises(
             secret_store.SecretAlgorithmNotSupportedException,
-            self.secret_store.store_secret,
-            secret_dto)
-
-    def test_store_secret_invalid_object_type(self):
-        key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.AES,
-                                        128, 'mode')
-        secret_dto = secret_store.SecretDTO(secret_store.SecretType.OPAQUE,
-                                            "AAAA",
-                                            key_spec,
-                                            'content_type',
-                                            transport_key=None)
-        self.assertRaises(
-            kss.KMIPSecretStoreError,
             self.secret_store.store_secret,
             secret_dto)
 
@@ -502,29 +685,55 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
     @utils.parameterized_dataset({
         'symmetric': [get_sample_symmetric_key(),
                       secret_store.SecretType.SYMMETRIC,
+                      enums.ObjectType.SYMMETRIC_KEY,
                       misc.KeyFormatType(enums.KeyFormatType.RAW),
-                      utils.get_symmetric_key()],
+                      utils.get_symmetric_key(),
+                      False],
+        'opaque': [get_sample_opaque_secret(),
+                   secret_store.SecretType.OPAQUE,
+                   enums.ObjectType.OPAQUE_DATA,
+                   misc.KeyFormatType(enums.KeyFormatType.RAW),
+                   utils.get_symmetric_key(),
+                   False],
         'public_key': [get_sample_public_key(),
                        secret_store.SecretType.PUBLIC,
+                       enums.ObjectType.PUBLIC_KEY,
                        misc.KeyFormatType(enums.KeyFormatType.X_509),
-                       base64.b64encode(keys.get_public_key_pem())],
+                       base64.b64encode(keys.get_public_key_pem()),
+                       False],
+        'public_key_pkcs1': [get_sample_public_key(pkcs1=True),
+                             secret_store.SecretType.PUBLIC,
+                             enums.ObjectType.PUBLIC_KEY,
+                             misc.KeyFormatType(enums.KeyFormatType.PKCS_1),
+                             base64.b64encode(keys.get_public_key_pem()),
+                             True],
         'private_key': [get_sample_private_key(),
                         secret_store.SecretType.PRIVATE,
+                        enums.ObjectType.PRIVATE_KEY,
                         misc.KeyFormatType(enums.KeyFormatType.PKCS_8),
-                        base64.b64encode(keys.get_private_key_pem())],
-        'opaque': [get_sample_symmetric_key(),
-                   secret_store.SecretType.OPAQUE,
-                   None,
-                   utils.get_symmetric_key()]
+                        base64.b64encode(keys.get_private_key_pem()),
+                        False],
+        'private_key_pkcs1': [get_sample_private_key(pkcs1=True),
+                              secret_store.SecretType.PRIVATE,
+                              enums.ObjectType.PRIVATE_KEY,
+                              misc.KeyFormatType(enums.KeyFormatType.PKCS_1),
+                              base64.b64encode(keys.get_private_key_pem()),
+                              True],
+        'certificate': [get_sample_certificate(),
+                        secret_store.SecretType.CERTIFICATE,
+                        enums.ObjectType.CERTIFICATE,
+                        None,
+                        base64.b64encode(keys.get_certificate_pem()),
+                        False]
     })
-    def test_get_secret(self, returned_secret, secret_type,
-                        key_format_type, expected_secret):
-        object_type, _ = self.secret_store._map_type_ss_to_kmip(secret_type)
+    def test_get_secret(self, kmip_secret, secret_type, kmip_type,
+                        key_format_type, expected_secret, pkcs1_only):
+        self.secret_store.pkcs1_only = pkcs1_only
         self.secret_store.client.get = mock.MagicMock(
-            proxy.KMIPProxy.get, return_value=results.GetResult(
+            proxy.KMIPProxy().get, return_value=results.GetResult(
                 contents.ResultStatus(enums.ResultStatus.SUCCESS),
-                object_type=attr.ObjectType(object_type),
-                secret=returned_secret))
+                object_type=attr.ObjectType(kmip_type),
+                secret=kmip_secret))
         uuid = utils.generate_test_uuid(0)
         metadata = {kss.KMIPSecretStore.KEY_UUID: uuid}
         secret_dto = self.secret_store.get_secret(secret_type, metadata)
@@ -542,7 +751,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
         sample_secret = self.sample_secret
         sample_secret.key_block.key_value.key_material = 'invalid_type'
         self.secret_store.client.get = mock.MagicMock(
-            proxy.KMIPProxy.get, return_value=results.GetResult(
+            proxy.KMIPProxy().get, return_value=results.GetResult(
                 contents.ResultStatus(enums.ResultStatus.SUCCESS),
                 object_type=attr.ObjectType(enums.ObjectType.SYMMETRIC_KEY),
                 secret=sample_secret))
@@ -555,7 +764,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
 
     def test_get_secret_symmetric_server_error_occurs(self):
         self.secret_store.client.get = mock.MagicMock(
-            proxy.KMIPProxy.get, return_value=results.GetResult(
+            proxy.KMIPProxy().get, return_value=results.GetResult(
                 contents.ResultStatus(enums.ResultStatus.OPERATION_FAILED)))
         metadata = {kss.KMIPSecretStore.KEY_UUID: self.symmetric_key_uuid}
         self.assertRaises(
@@ -592,7 +801,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
 
     def test_delete_secret_server_error_occurs(self):
         self.secret_store.client.destroy = mock.MagicMock(
-            proxy.KMIPProxy.destroy, return_value=results.DestroyResult(
+            proxy.KMIPProxy().destroy, return_value=results.DestroyResult(
                 contents.ResultStatus(enums.ResultStatus.OPERATION_FAILED)))
         metadata = {kss.KMIPSecretStore.KEY_UUID: self.symmetric_key_uuid}
         self.assertRaises(
@@ -624,7 +833,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
             actual_credential.credential_value.password.value)
 
     def test_credential_None(self):
-        CONF = cfg.CONF
+        CONF = kss.CONF
         CONF.kmip_plugin.username = None
         CONF.kmip_plugin.password = None
         CONF.kmip_plugin.keyfile = None
@@ -696,7 +905,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
                 "KMIPSecretStore._validate_keyfile_permissions")
 
         with mock.patch(func, **config) as m:
-            CONF = cfg.CONF
+            CONF = kss.CONF
             CONF.kmip_plugin.keyfile = '/some/path'
             kss.KMIPSecretStore(CONF)
             self.assertEqual(len(m.mock_calls), 1)

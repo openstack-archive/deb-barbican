@@ -23,6 +23,7 @@ import mimetypes
 
 import mock
 import pecan
+import six
 from testtools import testcase
 import webtest
 
@@ -113,13 +114,15 @@ def create_container(id_ref, project_id=None, external_project_id=None):
     return container
 
 
-def create_consumer(container_id, id_ref):
+def create_consumer(container_id, project_id, id_ref):
     """Generate a ContainerConsumerMetadatum entity instance."""
     data = {
         'name': 'test name',
         'URL': 'http://test/url'
     }
-    consumer = models.ContainerConsumerMetadatum(container_id, data)
+    consumer = models.ContainerConsumerMetadatum(container_id,
+                                                 project_id,
+                                                 data)
     consumer.id = id_ref
     return consumer
 
@@ -236,11 +239,6 @@ class BaseSecretsResource(FunctionalTest):
         self.secret_repo.create_from.return_value = self.secret
         self.setup_secret_repository_mock(self.secret_repo)
 
-        # Set up mocked project-secret repo
-        self.project_secret_repo = mock.MagicMock()
-        self.project_secret_repo.create_from.return_value = None
-        self.setup_project_secret_repository_mock(self.project_secret_repo)
-
         # Set up mocked encrypted datum repo
         self.datum_repo = mock.MagicMock()
         self.datum_repo.create_from.return_value = None
@@ -327,9 +325,8 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
                                     content_type=self.datum.content_type)
 
         self.secret.secret_acls = []
-        self.secret.project_assocs = [mock.MagicMock()]
-        secret_project = self.secret.project_assocs[0].projects
-        secret_project.external_id = self.external_project_id
+        self.secret.project = mock.MagicMock()
+        self.secret.project.external_id = self.external_project_id
 
         # Set up mocked project
         self.project = models.Project()
@@ -349,9 +346,6 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
         self.secret_repo.get_secret_by_id = mock.Mock(return_value=self.secret)
         self.secret_repo.delete_entity_by_id = mock.Mock(return_value=None)
         self.setup_secret_repository_mock(self.secret_repo)
-
-        # Set up mocked project-secret repo
-        self.setup_project_secret_repository_mock()
 
         # Set up mocked encrypted datum repo
         self.datum_repo = mock.MagicMock()
@@ -392,7 +386,7 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
         self.assertNotIn('content_encodings', resp.namespace)
         self.assertIn('content_types', resp.namespace)
         self.assertIn(self.datum.content_type,
-                      resp.namespace['content_types'].itervalues())
+                      six.itervalues(resp.namespace['content_types']))
         self.assertNotIn('mime_type', resp.namespace)
 
     @testcase.attr('deprecated')
@@ -539,7 +533,7 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
         self.assertIsNotNone(resp.namespace)
         self.assertIn('content_types', resp.namespace)
         self.assertIn(self.datum.content_type,
-                      resp.namespace['content_types'].itervalues())
+                      six.itervalues(resp.namespace['content_types']))
 
     @mock.patch('barbican.plugin.resources.get_transport_key_id_for_retrieval')
     def test_should_get_secret_meta_for_binary_with_tkey(
@@ -566,7 +560,7 @@ class WhenGettingPuttingOrDeletingSecretUsingSecretResource(FunctionalTest):
         self.assertIsNotNone(resp.namespace)
         self.assertIn('content_types', resp.namespace)
         self.assertIn(self.datum.content_type,
-                      resp.namespace['content_types'].itervalues())
+                      six.itervalues(resp.namespace['content_types']))
         self.assertIn('transport_key_ref', resp.namespace)
         self.assertEqual(
             resp.namespace['transport_key_ref'],
@@ -784,6 +778,12 @@ class WhenCreatingConsumersUsingConsumersResource(FunctionalTest):
         self.project_repo.get.return_value = self.project
         self.setup_project_repository_mock(self.project_repo)
 
+        # Set up mocked quota enforcer
+        self.quota_patch = mock.patch(
+            'barbican.common.quota.QuotaEnforcer.enforce', return_value=None)
+        self.quota_patch.start()
+        self.addCleanup(self.quota_patch.stop)
+
         # Set up mocked container
         self.container = create_container(
             id_ref='id1',
@@ -888,8 +888,12 @@ class WhenGettingOrDeletingConsumersUsingConsumerResource(FunctionalTest):
             external_project_id=self.external_project_id)
 
         # Set up mocked consumers
-        self.consumer = create_consumer(self.container.id, id_ref='id2')
-        self.consumer2 = create_consumer(self.container.id, id_ref='id3')
+        self.consumer = create_consumer(self.container.id,
+                                        self.project_internal_id,
+                                        id_ref='id2')
+        self.consumer2 = create_consumer(self.container.id,
+                                         self.project_internal_id,
+                                         id_ref='id3')
 
         self.consumer_ref = {
             'name': self.consumer.name,
@@ -1093,8 +1097,12 @@ class WhenPerformingUnallowedOperationsOnConsumers(FunctionalTest):
             external_project_id=self.external_project_id)
 
         # Set up mocked container consumers
-        self.consumer = create_consumer(self.container.id, id_ref='id2')
-        self.consumer2 = create_consumer(self.container.id, id_ref='id3')
+        self.consumer = create_consumer(self.container.id,
+                                        self.project_internal_id,
+                                        id_ref='id2')
+        self.consumer2 = create_consumer(self.container.id,
+                                         self.project_internal_id,
+                                         id_ref='id3')
 
         self.consumer_ref = {
             'name': self.consumer.name,

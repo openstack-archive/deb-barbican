@@ -287,41 +287,59 @@ class WhenCallingTasksMethod(utils.BaseTestCase):
         super(WhenCallingTasksMethod, self).tearDown()
         self.is_server_side_patcher.stop()
 
+    @mock.patch('barbican.queue.server.schedule_order_retry_tasks')
     @mock.patch('barbican.tasks.resources.BeginTypeOrder')
-    def test_should_process_begin_order(self, mock_begin_order):
-        mock_begin_order.return_value.process.return_value = None
+    def test_should_process_begin_order(self, mock_begin_order, mock_schedule):
+        method = mock_begin_order.return_value.process_and_suppress_exceptions
+        method.return_value = 'result'
 
         self.tasks.process_type_order(
-            None, self.order_id, self.external_project_id)
+            None, self.order_id, self.external_project_id, self.request_id)
 
         mock_process = mock_begin_order.return_value
         mock_process.process_and_suppress_exceptions.assert_called_with(
             self.order_id, self.external_project_id)
+        mock_schedule.assert_called_with(
+            mock.ANY, 'result', None, 'order1234',
+            'keystone1234', 'request1234')
 
+    @mock.patch('barbican.queue.server.schedule_order_retry_tasks')
     @mock.patch('barbican.tasks.resources.UpdateOrder')
-    def test_should_process_update_order(self, mock_update_order):
-        mock_update_order.return_value.process.return_value = None
-        updated_meta = {}
+    def test_should_process_update_order(
+            self, mock_update_order, mock_schedule):
+        method = mock_update_order.return_value.process_and_suppress_exceptions
+        method.return_value = 'result'
+        updated_meta = {'foo': 1}
 
         self.tasks.update_order(
-            None, self.order_id, self.external_project_id, updated_meta)
+            None, self.order_id, self.external_project_id,
+            updated_meta, self.request_id)
 
         mock_process = mock_update_order.return_value
         mock_process.process_and_suppress_exceptions.assert_called_with(
             self.order_id, self.external_project_id, updated_meta
         )
+        mock_schedule.assert_called_with(
+            mock.ANY, 'result', None,
+            'order1234', 'keystone1234', updated_meta, 'request1234')
 
+    @mock.patch('barbican.queue.server.schedule_order_retry_tasks')
     @mock.patch('barbican.tasks.resources.CheckCertificateStatusOrder')
-    def test_should_check_certificate_order(self, mock_check_cert_order):
-        mock_check_cert_order.return_value.process.return_value = None
+    def test_should_check_certificate_order(
+            self, mock_check_cert, mock_schedule):
+        method = mock_check_cert.return_value.process_and_suppress_exceptions
+        method.return_value = 'result'
 
         self.tasks.check_certificate_status(
-            None, self.order_id, self.external_project_id)
+            None, self.order_id, self.external_project_id, self.request_id)
 
-        mock_process = mock_check_cert_order.return_value
+        mock_process = mock_check_cert.return_value
         mock_process.process_and_suppress_exceptions.assert_called_with(
             self.order_id, self.external_project_id
         )
+        mock_schedule.assert_called_with(
+            mock.ANY, 'result', None, 'order1234',
+            'keystone1234', 'request1234')
 
     @mock.patch('barbican.tasks.resources.BeginTypeOrder')
     def test_process_order_catch_exception(self, mock_begin_order):
@@ -329,7 +347,8 @@ class WhenCallingTasksMethod(utils.BaseTestCase):
         mock_begin_order.return_value._process.side_effect = Exception()
 
         self.tasks.process_type_order(None, self.order_id,
-                                      self.external_project_id)
+                                      self.external_project_id,
+                                      self.request_id)
 
 
 class WhenUsingTaskServer(database_utils.RepositoryTestCase):
@@ -375,6 +394,7 @@ class WhenUsingTaskServer(database_utils.RepositoryTestCase):
             external_id=self.external_id)
         self.order = database_utils.create_order(
             project=project)
+        self.request_id = 'request1234'
 
     def tearDown(self):
         super(WhenUsingTaskServer, self).tearDown()
@@ -404,7 +424,7 @@ class WhenUsingTaskServer(database_utils.RepositoryTestCase):
         # the session when it is done. Hence we must re-retrieve the order for
         # verification afterwards.
         self.server.process_type_order(
-            None, self.order.id, self.external_id)
+            None, self.order.id, self.external_id, self.request_id)
 
         order_repo = repositories.get_order_repository()
         order_result = order_repo.get(order_id, self.external_id)
@@ -427,7 +447,7 @@ class WhenUsingTaskServer(database_utils.RepositoryTestCase):
         # the session when it is done. Hence we must re-retrieve the order for
         # verification afterwards.
         self.server.update_order(
-            None, self.order.id, self.external_id, None)
+            None, self.order.id, self.external_id, None, self.request_id)
 
         order_repo = repositories.get_order_repository()
         order_result = order_repo.get(order_id, self.external_id)

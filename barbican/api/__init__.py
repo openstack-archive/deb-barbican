@@ -14,29 +14,23 @@
 # limitations under the License.
 
 """
-API handler for Cloudkeep's Barbican
+API handler for Barbican
 """
 import pkgutil
 
-from oslo_config import cfg
 from oslo_policy import policy
+from oslo_serialization import jsonutils as json
 import pecan
+import six
 
+from barbican.common import config
 from barbican.common import exception
 from barbican.common import utils
 from barbican import i18n as u
-from barbican.openstack.common import jsonutils as json
 
 
 LOG = utils.getLogger(__name__)
-MAX_BYTES_REQUEST_INPUT_ACCEPTED = 15000
-common_opts = [
-    cfg.IntOpt('max_allowed_request_size_in_bytes',
-               default=MAX_BYTES_REQUEST_INPUT_ACCEPTED),
-]
-
-CONF = cfg.CONF
-CONF.register_opts(common_opts)
+CONF = config.CONF
 
 
 class ApiResource(object):
@@ -136,7 +130,7 @@ def get_items(obj):
 
 @get_items.register(dict)
 def _json_object(obj):
-    return obj.iteritems()
+    return six.iteritems(obj)
 
 
 @get_items.register(list)

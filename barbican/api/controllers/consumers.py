@@ -16,6 +16,7 @@ from barbican import api
 from barbican.api import controllers
 from barbican.common import exception
 from barbican.common import hrefs
+from barbican.common import quota
 from barbican.common import resources as res
 from barbican.common import utils
 from barbican.common import validators
@@ -57,6 +58,9 @@ class ContainerConsumerController(controllers.ACLMixin):
 
         dict_fields = consumer.to_dict_fields()
 
+        LOG.info(u._LI('Retrieved a consumer for project: %s'),
+                 external_project_id)
+
         return hrefs.convert_to_hrefs(
             hrefs.convert_to_hrefs(dict_fields)
         )
@@ -70,6 +74,8 @@ class ContainerConsumersController(controllers.ACLMixin):
         self.consumer_repo = repo.get_container_consumer_repository()
         self.container_repo = repo.get_container_repository()
         self.validator = validators.ContainerConsumerValidator()
+        self.quota_enforcer = quota.QuotaEnforcer('consumers',
+                                                  self.consumer_repo)
 
     @pecan.expose()
     def _lookup(self, consumer_id, *remainder):
@@ -116,6 +122,8 @@ class ContainerConsumersController(controllers.ACLMixin):
             )
             resp_ctrs_overall.update({'total': total})
 
+        LOG.info(u._LI('Retrieved a consumer list for project: %s'),
+                 external_project_id)
         return resp_ctrs_overall
 
     @index.when(method='POST', template='json')
@@ -134,13 +142,19 @@ class ContainerConsumersController(controllers.ACLMixin):
         except exception.NotFound:
             controllers.containers.container_not_found()
 
+        self.quota_enforcer.enforce(project)
+
         new_consumer = models.ContainerConsumerMetadatum(self.container_id,
+                                                         project.id,
                                                          data)
         new_consumer.project_id = project.id
         self.consumer_repo.create_or_update_from(new_consumer, container)
 
         url = hrefs.convert_consumer_to_href(new_consumer.container_id)
         pecan.response.headers['Location'] = url
+
+        LOG.info(u._LI('Created a consumer for project: %s'),
+                 external_project_id)
 
         return self._return_container_data(self.container_id,
                                            external_project_id)
@@ -168,8 +182,14 @@ class ContainerConsumersController(controllers.ACLMixin):
         except exception.NotFound:
             LOG.exception(u._LE('Problem deleting consumer'))
             _consumer_not_found()
-        return self._return_container_data(self.container_id,
-                                           external_project_id)
+
+        ret_data = self._return_container_data(
+            self.container_id,
+            external_project_id
+        )
+        LOG.info(u._LI('Deleted a consumer for project: %s'),
+                 external_project_id)
+        return ret_data
 
     def _return_container_data(self, container_id, external_project_id):
         try:

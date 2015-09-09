@@ -11,21 +11,26 @@
 # limitations under the License.
 
 import mock
-from oslo_config import cfg
 import sqlalchemy
 
+from alembic import script as alembic_script
+
+from barbican.common import config
 from barbican.common import exception
+from barbican.model.migration import commands as migration
 from barbican.model import models
 from barbican.model import repositories
 from barbican.tests import database_utils
 from barbican.tests import utils
+
+from oslo_config import cfg
 
 
 class WhenCleaningRepositoryPagingParameters(utils.BaseTestCase):
 
     def setUp(self):
         super(WhenCleaningRepositoryPagingParameters, self).setUp()
-        self.CONF = cfg.CONF
+        self.CONF = config.CONF
         self.default_limit = self.CONF.default_limit_paging
 
     def test_parameters_not_assigned(self):
@@ -92,7 +97,7 @@ class WhenInvokingExceptionMethods(utils.BaseTestCase):
 
     def setUp(self):
         super(WhenInvokingExceptionMethods, self).setUp()
-        self.CONF = cfg.CONF
+        self.CONF = config.CONF
 
         self.entity_id = '123456'
         self.entity_name = 'test_entity'
@@ -240,7 +245,7 @@ class WhenTestingGetEnginePrivate(utils.BaseTestCase):
             exception_result.message)
 
     @mock.patch('barbican.model.repositories._create_engine')
-    def test_should_complete_with_no_alembic_create(
+    def test_should_complete_with_no_alembic_create_default_configs(
             self, mock_create_engine):
 
         repositories.CONF.set_override("db_auto_create", False)
@@ -251,6 +256,39 @@ class WhenTestingGetEnginePrivate(utils.BaseTestCase):
         repositories._get_engine(None)
 
         engine.connect.assert_called_once_with()
+        mock_create_engine.assert_called_once_with(
+            'connection',
+            pool_recycle=3600,
+            convert_unicode=True,
+            echo=False
+        )
+
+    @mock.patch('barbican.model.repositories._create_engine')
+    def test_should_complete_with_no_alembic_create_pool_configs(
+            self, mock_create_engine):
+
+        repositories.CONF.set_override("db_auto_create", False)
+        repositories.CONF.set_override(
+            "sql_pool_class", "QueuePool")
+        repositories.CONF.set_override("sql_pool_size", 22)
+        repositories.CONF.set_override("sql_pool_max_overflow", 11)
+
+        engine = mock.MagicMock()
+        mock_create_engine.return_value = engine
+
+        # Invoke method under test.
+        repositories._get_engine(None)
+
+        engine.connect.assert_called_once_with()
+        mock_create_engine.assert_called_once_with(
+            'connection',
+            pool_recycle=3600,
+            convert_unicode=True,
+            echo=False,
+            poolclass=sqlalchemy.pool.QueuePool,
+            pool_size=22,
+            max_overflow=11
+        )
 
 
 class WhenTestingAutoGenerateTables(utils.BaseTestCase):
@@ -288,3 +326,55 @@ class WhenTestingIsDbConnectionError(utils.BaseTestCase):
         result = repositories.is_db_connection_error(args)
 
         self.assertTrue(result)
+
+
+class WhenTestingMigrations(utils.BaseTestCase):
+
+    def setUp(self):
+        super(WhenTestingMigrations, self).setUp()
+        self.alembic_config = migration.init_config()
+        self.alembic_config.barbican_config = cfg.CONF
+
+    def test_no_downgrade(self):
+        script_dir = alembic_script.ScriptDirectory.from_config(
+            self.alembic_config)
+        versions = [v for v in script_dir.walk_revisions(base='base',
+                                                         head='heads')]
+        failed_revisions = []
+        for version in versions:
+            if hasattr(version.module, 'downgrade'):
+                failed_revisions.append(version.revision)
+
+        if failed_revisions:
+            self.fail('Migrations %s have downgrade' % failed_revisions)
+
+
+class DummyRepo(repositories.BaseRepo):
+    """Repository for the increasing code coverage of unit tests."""
+    def get_session(self, session=None):
+        return None
+
+    def _do_entity_name(self):
+        return "Dummy"
+
+    def _do_build_get_query(self, entity_id, external_project_id, session):
+        return None
+
+    def _do_validate(self, values):
+        pass
+
+    def _build_get_project_entities_query(self, project_id, session):
+        return None
+
+
+class WhenIncreasingRepositoryTestCoverage(utils.BaseTestCase):
+
+    def test_get_count_should_return_zero(self):
+        dummy_repo = DummyRepo()
+        count = dummy_repo.get_count('dummy_project_id')
+        self.assertEqual(0, count)
+
+    def test_get_project_entities_should_return_empty(self):
+        dummy_repo = DummyRepo()
+        count = dummy_repo.get_project_entities('dummy_project_id')
+        self.assertEqual([], count)

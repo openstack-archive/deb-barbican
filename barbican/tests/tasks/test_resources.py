@@ -14,11 +14,11 @@
 # limitations under the License.
 
 import mock
+from oslo_utils import timeutils
 import six
 
 from barbican import i18n as u
 from barbican.model import models
-from barbican.openstack.common import timeutils
 from barbican.tasks import common
 from barbican.tasks import resources
 from barbican.tests import utils
@@ -66,10 +66,6 @@ class BaseOrderTestCase(utils.BaseTestCase, utils.MockModelRepositoryMixin):
         self.secret_repo = mock.MagicMock()
         self.secret_repo.create_from.return_value = None
         self.setup_secret_repository_mock(self.secret_repo)
-
-        self.project_secret_repo = mock.MagicMock()
-        self.project_secret_repo.create_from.return_value = None
-        self.setup_project_secret_repository_mock(self.project_secret_repo)
 
         self.datum_repo = mock.MagicMock()
         self.datum_repo.create_from.return_value = None
@@ -272,7 +268,8 @@ class WhenBeginningCertificateTypeOrder(BaseOrderTestCase):
             self, mock_issue_cert_request):
         mock_issue_cert_request.return_value = None
 
-        self.resource.process(self.order.id, self.external_project_id)
+        result = self.resource.process_and_suppress_exceptions(
+            self.order.id, self.external_project_id)
 
         self.order_repo.get.assert_called_once_with(
             entity_id=self.order.id,
@@ -286,6 +283,7 @@ class WhenBeginningCertificateTypeOrder(BaseOrderTestCase):
             mock.ANY
         )
         self.assertIsNone(self.order.container_id)
+        self.assertIsInstance(result, common.FollowOnProcessingStatusDTO)
 
     @mock.patch(
         'barbican.tasks.certificate_resources.issue_certificate_request')
@@ -293,7 +291,8 @@ class WhenBeginningCertificateTypeOrder(BaseOrderTestCase):
             self, mock_issue_cert_request):
         mock_issue_cert_request.return_value = self.container
 
-        self.resource.process(self.order.id, self.external_project_id)
+        result = self.resource.process(
+            self.order.id, self.external_project_id)
 
         self.order_repo.get.assert_called_once_with(
             entity_id=self.order.id,
@@ -307,6 +306,7 @@ class WhenBeginningCertificateTypeOrder(BaseOrderTestCase):
             mock.ANY
         )
         self.assertEqual(self.container.id, self.order.container_id)
+        self.assertIsInstance(result, common.FollowOnProcessingStatusDTO)
 
 
 class WhenUpdatingOrder(BaseOrderTestCase):
@@ -323,7 +323,7 @@ class WhenUpdatingOrder(BaseOrderTestCase):
     def test_should_update_certificate_order(self, mock_modify_cert_request):
         self.order.type = models.OrderType.CERTIFICATE
 
-        self.resource.process(
+        self.resource.process_and_suppress_exceptions(
             self.order.id, self.external_project_id, self.updated_meta)
 
         self.assertEqual(self.order.status, models.States.ACTIVE)
@@ -474,7 +474,8 @@ class WhenCheckingCertificateStatus(BaseOrderTestCase):
             self, mock_check_cert_request):
         mock_check_cert_request.return_value = None
 
-        self.resource.process(self.order.id, self.external_project_id)
+        result = self.resource.process_and_suppress_exceptions(
+            self.order.id, self.external_project_id)
 
         self.order_repo.get.assert_called_once_with(
             entity_id=self.order.id,
@@ -488,6 +489,7 @@ class WhenCheckingCertificateStatus(BaseOrderTestCase):
             mock.ANY
         )
         self.assertIsNone(self.order.container_id)
+        self.assertIsInstance(result, common.FollowOnProcessingStatusDTO)
 
     @mock.patch(
         'barbican.tasks.certificate_resources.check_certificate_request')
