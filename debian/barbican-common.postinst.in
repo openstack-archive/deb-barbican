@@ -2,7 +2,7 @@
 
 set -e
 
-CONF=/etc/barbican/barbican-api.conf
+CONF=/etc/barbican/barbican.conf
 API_CONF=/etc/barbican/barbican-api-paste.ini
 
 #PKGOS-INCLUDE#
