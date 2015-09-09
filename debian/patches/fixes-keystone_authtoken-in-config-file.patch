@@ -3,9 +3,11 @@ Author: Thomas Goirand <zigo@debian.org>
 Forwarded: no
 Last-Update: 2015-06-24
 
---- barbican-2015.1.0.orig/etc/barbican/barbican-api-paste.ini
-+++ barbican-2015.1.0/etc/barbican/barbican-api-paste.ini
-@@ -40,11 +40,14 @@ paste.filter_factory = barbican.api.midd
+Index: barbican/etc/barbican/barbican-api-paste.ini
+===================================================================
+--- barbican.orig/etc/barbican/barbican-api-paste.ini
++++ barbican/etc/barbican/barbican-api-paste.ini
+@@ -39,11 +39,14 @@ paste.filter_factory = barbican.api.midd
  [filter:keystone_authtoken]
  paste.filter_factory = keystonemiddleware.auth_token:filter_factory
  #need ability to re-auth a token, thus admin url

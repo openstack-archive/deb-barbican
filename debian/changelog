@@ -2,6 +2,7 @@ barbican (1:1.0.0~b3-1) experimental; urgency=medium
 
   * New upstream release.
   * Fixed (build-)depends for this release.
+  * Rebased patches.
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 09 Sep 2015 13:35:08 +0200
 
