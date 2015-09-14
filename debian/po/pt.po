@@ -5,10 +5,10 @@
 # Américo Monteiro <a_monteiro@gmx.com>, 2015.
 msgid ""
 msgstr ""
-"Project-Id-Version: barbican 2015.1.0-3\n"
+"Project-Id-Version: barbican 2015.1.0-7\n"
 "Report-Msgid-Bugs-To: barbican@packages.debian.org\n"
 "POT-Creation-Date: 2015-06-23 15:55+0200\n"
-"PO-Revision-Date: 2015-06-07 23:50+0100\n"
+"PO-Revision-Date: 2015-08-28 00:01+0100\n"
 "Last-Translator: Américo Monteiro <a_monteiro@gmx.com>\n"
 "Language-Team: Portuguese <traduz@debianpt.org>\n"
 "Language: pt\n"
@@ -22,7 +22,7 @@ msgstr ""
 #. Description
 #: ../barbican-api.templates:2001
 msgid "Register Barbican in the Keystone endpoint catalog?"
-msgstr ""
+msgstr "Registar o Barbican no catálogo de \"endpoint\" do Keystone?"
 
 #. Type: boolean
 #. Description
@@ -32,6 +32,9 @@ msgid ""
 "accessible. This is done using \"keystone service-create\" and \"keystone "
 "endpoint-create\". This can be done automatically now."
 msgstr ""
+"Cada serviço do OpenStack (cada API) deve ser registado de modo a ser "
+"acessível. Isto é feito usado \"keystone service-create\" e \"keystone "
+"endpoint-create\". Isto pode ser feito automaticamente agora."
 
 #. Type: boolean
 #. Description
@@ -40,12 +43,14 @@ msgid ""
 "Note that you will need to have an up and running Keystone server on which "
 "to connect using the Keystone authentication token."
 msgstr ""
+"Note que irá precisar de ter um servidor Keystone a funcionar no qual ligar "
+"usando o sinal de autenticação do Keystone."
 
 #. Type: string
 #. Description
 #: ../barbican-api.templates:3001
 msgid "Keystone server IP address:"
-msgstr ""
+msgstr "Endereço IP do servidor do Keystone:"
 
 #. Type: string
 #. Description
@@ -54,12 +59,15 @@ msgid ""
 "Please enter the IP address of the Keystone server, so that barbican-api can "
 "contact Keystone to do the Barbican service and endpoint creation."
 msgstr ""
+"Por favor indique o endereço IP do servidor Keystone, para que o "
+"barbican-api possa contactar o Keystone para fazer o serviço Barbican "
+"e a criação do \"endpoint\"."
 
 #. Type: password
 #. Description
 #: ../barbican-api.templates:4001
 msgid "Keystone authentication token:"
-msgstr ""
+msgstr "Sinal de autenticação do Keystone:"
 
 #. Type: password
 #. Description
@@ -68,18 +76,21 @@ msgid ""
 "To configure its endpoint in Keystone, barbican-api needs the Keystone "
 "authentication token."
 msgstr ""
+"Para configurar o seu endpoint no Keystone, o barbican-api precisa do "
+"sinal de autenticação do Keystone."
 
 #. Type: string
 #. Description
 #: ../barbican-api.templates:5001
 msgid "Barbican endpoint IP address:"
-msgstr ""
+msgstr "Endereço IP endpoint do Barbican:"
 
 #. Type: string
 #. Description
 #: ../barbican-api.templates:5001
 msgid "Please enter the IP address that will be used to contact Barbican."
 msgstr ""
+"Por favor indique o endereço IP que será usado para contactar o Barbican."
 
 #. Type: string
 #. Description
@@ -89,12 +100,15 @@ msgid ""
 "service, so if you are installing a public cloud, this should be a public IP "
 "address."
 msgstr ""
+"Este endereço IP deve ser acessível a partir dos clientes que vão usar este "
+"serviço, portanto se está a instalar uma \"cloud\" pública, este deve ser um "
+"endereço IP público."
 
 #. Type: string
 #. Description
 #: ../barbican-api.templates:6001
 msgid "Name of the region to register:"
-msgstr ""
+msgstr "Nome da região a registar:"
 
 #. Type: string
 #. Description
@@ -104,103 +118,6 @@ msgid ""
 "location. Please enter the zone that you wish to use when registering the "
 "endpoint."
 msgstr ""
-
-#~ msgid "Set up a database for Barbican?"
-#~ msgstr "Configurar uma base de dados para o Barbican?"
-
-#~ msgid ""
-#~ "No database has been set up for Barbican to use. Before continuing, you "
-#~ "should make sure you have the following information:"
-#~ msgstr ""
-#~ "Nenhuma base de dados foi configurada para o Barbican usar. Antes de "
-#~ "continuar, você deve certificar-se que tem a seguinte informação:"
-
-#~ msgid ""
-#~ " * the type of database that you want to use;\n"
-#~ " * the database server hostname (that server must allow TCP connections "
-#~ "from this\n"
-#~ "   machine);\n"
-#~ " * a username and password to access the database."
-#~ msgstr ""
-#~ " * o tipo de base de dados que deseja usar;\n"
-#~ " * o nome de máquina do servidor da base de dados (esse servidor deve "
-#~ "permitir ligações TCP a partir desta\n"
-#~ "   máquina);\n"
-#~ " * um nome de utilizador e palavra passe para aceder à base de dados."
-
-#~ msgid ""
-#~ "If some of these requirements are missing, do not choose this option and "
-#~ "run with regular SQLite support."
-#~ msgstr ""
-#~ "Se alguns destes requerimentos estão em falta, não escolha esta opção e "
-#~ "corra com o suporte SQLite regular."
-
-#~ msgid ""
-#~ "You can change this setting later on by running \"dpkg-reconfigure -plow "
-#~ "barbican-common\"."
-#~ msgstr ""
-#~ "Você pode modificar estas definições mais tarde ao correr \"dpkg-"
-#~ "reconfigure -plow barbican-common\"."
-
-#~ msgid "Authentication server hostname:"
-#~ msgstr "Nome de máquina do servidor de autenticação:"
-
-#~ msgid ""
-#~ "Please specify the hostname of the authentication server. Typically this "
-#~ "is also the hostname of the OpenStack Identity Service (Keystone)."
-#~ msgstr ""
-#~ "Por favor especifique o nome de máquina do servidor de autenticação. "
-#~ "Tipicamente este é também o nome de máquina do Serviço de Identidade "
-#~ "OpenStack (Keystone)."
-
-#~ msgid "Authentication server tenant name:"
-#~ msgstr "Nome \"tenant\" do servidor de autenticação:"
-
-#~ msgid "Please specify the authentication server tenant name."
-#~ msgstr ""
-#~ "Por favor especifique o nome \"tenant\" do servidor de autenticação."
-
-#~ msgid "Authentication server username:"
-#~ msgstr "Nome de utilizador do servidor de autenticação:"
-
-#~ msgid "Please specify the username to use with the authentication server."
-#~ msgstr ""
-#~ "Por favor especifique o nome de utilizador a usar com o servidor de "
-#~ "autenticação."
-
-#~ msgid "Authentication server password:"
-#~ msgstr "Palavra passe do servidor de autenticação:"
-
-#~ msgid "Please specify the password to use with the authentication server."
-#~ msgstr ""
-#~ "Por favor especifique a palavra passe a usar com o servidor de "
-#~ "autenticação."
-
-#~ msgid "IP address of your RabbitMQ host:"
-#~ msgstr "Endereço IP da sua máquina RabbitMQ:"
-
-#~ msgid ""
-#~ "In order to interoperate with other components of OpenStack, this package "
-#~ "needs to connect to a central RabbitMQ server."
-#~ msgstr ""
-#~ "De modo a interagir com outros componentes do OpenStack, este pacote "
-#~ "precisa de ligar a um servidor RabbitMQ central."
-
-#~ msgid "Please specify the IP address of that server."
-#~ msgstr "Por favor especifique o endereço IP desse servidor."
-
-#~ msgid "Username for connection to the RabbitMQ server:"
-#~ msgstr "Nome de utilizador para ligação ao servidor RabbitMQ:"
-
-#~ msgid "Please specify the username used to connect to the RabbitMQ server."
-#~ msgstr ""
-#~ "Por favor especifique o nome de utilizador a usar para ligação ao "
-#~ "servidor RabbitMQ."
-
-#~ msgid "Password for connection to the RabbitMQ server:"
-#~ msgstr "Palavra passe para ligação ao servidor RabbitMQ:"
-
-#~ msgid "Please specify the password used to connect to the RabbitMQ server."
-#~ msgstr ""
-#~ "Por favor especifique a palavra passe a usar para ligação ao servidor "
-#~ "RabbitMQ."
+"O OpenStack suporta usar zonas de disponibilidade, com cada região a "
+"representar um local. Por favor indique a zona que deseja usar ao registar o "
+"endpoint."
