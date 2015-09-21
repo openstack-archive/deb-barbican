@@ -2,8 +2,9 @@ barbican (1:1.0.0~b3-2) UNRELEASED; urgency=medium
 
   * Added fr.po.
   * Fixed minimum python-pykmip build-depends.
+  * Now barbican-api depends on openstackclient.
 
- -- Thomas Goirand <zigo@debian.org>  Wed, 16 Sep 2015 08:38:08 +0000
+ -- Thomas Goirand <zigo@debian.org>  Mon, 21 Sep 2015 12:55:10 +0000
 
 barbican (1:1.0.0~b3-1) experimental; urgency=medium
 

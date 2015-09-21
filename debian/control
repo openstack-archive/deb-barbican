@@ -125,6 +125,7 @@ Architecture: all
 Depends: adduser,
          uwsgi-core,
          barbican-common (= ${binary:Version}),
+         python-openstackclient,
          ${misc:Depends},
          ${python:Depends}
 Description: OpenStack Key Management Service - API Server
