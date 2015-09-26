@@ -1,5 +1,7 @@
-barbican (1:1.0.0~b3-2) UNRELEASED; urgency=medium
+barbican (1:1.0.0~rc1-1) experimental; urgency=medium
 
+  * New upstream release.
+  * Fixed (build-)depends for this release.
   * Added fr.po.
   * Fixed minimum python-pykmip build-depends.
   * Now barbican-api depends on openstackclient.
