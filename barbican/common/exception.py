@@ -445,3 +445,31 @@ class QuotaReached(BarbicanHTTPException):
         self.external_project_id = kwargs.get('external_project_id')
         self.quota = kwargs.get('quota')
         self.resource_type = kwargs.get('resource_type')
+
+
+class InvalidParentCA(BarbicanHTTPException):
+    message = u._("Invalid Parent CA: %(parent_ca_ref)s")
+    client_message = message
+    status_code = 400
+
+
+class SubCAsNotSupported(BarbicanHTTPException):
+    message = u._("Plugin does not support generation of subordinate CAs")
+    client_message = message
+    status_code = 400
+
+
+class SubCANotCreated(BarbicanHTTPException):
+    message = u._("Errors in creating subordinate CA: %(name)")
+    client_message = message
+
+
+class CannotDeleteBaseCA(BarbicanHTTPException):
+    message = u._("Only subordinate CAs can be deleted.")
+    status_code = 403
+
+
+class UnauthorizedSubCA(BarbicanHTTPException):
+    message = u._("Subordinate CA is not owned by this project")
+    client_message = message
+    status_code = 403

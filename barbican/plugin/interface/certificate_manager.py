@@ -35,7 +35,7 @@ from barbican.model import models
 from barbican.model import repositories as repos
 from barbican.plugin.util import utils as plugin_utils
 
-
+LOG = utils.getLogger(__name__)
 CONF = config.new_config()
 
 # Configuration for certificate processing plugins:
@@ -100,7 +100,7 @@ PLUGIN_CA_ID = "plugin_ca_id"
 # fields for ca_info dict keys
 INFO_NAME = "name"
 INFO_DESCRIPTION = "description"
-INFO_CA_SIGNING_CERT = "ca_signing_cert"
+INFO_CA_SIGNING_CERT = "ca_signing_certificate"
 INFO_INTERMEDIATES = "intermediates"
 INFO_EXPIRATION = "expiration"
 
@@ -429,6 +429,65 @@ class CertificatePluginBase(object):
 
         return {name: default_info}
 
+    def supports_create_ca(self):
+        """Returns whether the plugin supports on-the-fly generation of subCAs
+
+        :return: boolean, True if supported, defaults to False
+        """
+        return False    # pragma: no cover
+
+    def create_ca(self, ca_create_dto):
+        """Creates a subordinate CA upon request
+
+        This call should only be made if a plugin returns True for
+        supports_create_ca().
+
+        :param ca_create_dto:
+            Data transfer object :class:`CACreateDTO` containing data
+            required to generate a subordinate CA.  This data includes
+            the subject DN of the new CA signing certificate, a name for
+            the new CA and a reference to the CA that will issue the new
+            subordinate CA's signing certificate,
+
+        :return: ca_info:
+            Dictionary containing the data needed to create a
+            models.CertificateAuthority object
+        """
+        raise NotImplementedError    # pragma: no cover
+
+    def delete_ca(self, ca_id):
+        """Deletes a subordinate CA
+
+        Like the create_ca call, this should only be made if the plugin
+        returns Ture for supports_create_ca()
+
+        :param ca_id: id for the CA as specified by the plugin
+        :return: None
+        """
+        raise NotImplementedError   # pragma: no cover
+
+
+class CACreateDTO(object):
+    """Class that includes data needed to create a subordinate CA """
+
+    def __init__(self, name=None, description=None, subject_dn=None,
+                 parent_ca_id=None):
+        """Creates a new CACreateDTO object.
+
+        :param name: Name for the  subordinate CA
+        :param description: Description for the subordinate CA
+        :param subject_dn:
+            Subject DN for the new subordinate CA's signing certificate
+        :param parent_ca_id:
+            ID of the CA which is supposed to sign the subordinate CA's
+            signing certificate.  This is ID as known to the plugin
+            (not the Barbican UUID)
+        """
+        self.name = name
+        self.description = description
+        self.subject_dn = subject_dn
+        self.parent_ca_id = parent_ca_id
+
 
 class CertificateStatus(object):
     """Defines statuses for certificate request process.
@@ -563,6 +622,7 @@ class CertificatePluginManager(named.NamedExtensionManager):
 
     def refresh_ca_table(self):
         """Refreshes the CertificateAuthority table."""
+        updates_made = False
         for plugin in plugin_utils.get_active_plugins(self):
             plugin_name = utils.generate_fullname_for(plugin)
             cas, offset, limit, total = self.ca_repo.get_by_create_date(
@@ -573,36 +633,52 @@ class CertificatePluginManager(named.NamedExtensionManager):
                 # queried or that plugin's entries have expired.
                 # Most of the time, this will be a no-op for plugins.
                 self.update_ca_info(plugin)
+                updates_made = True
+        if updates_made:
+            # commit to DB to avoid async issues with different threads
+            repos.commit()
 
     def update_ca_info(self, cert_plugin):
         """Update the CA info for a particular plugin."""
 
         plugin_name = utils.generate_fullname_for(cert_plugin)
-        new_ca_infos = cert_plugin.get_ca_info()
+        try:
+            new_ca_infos = cert_plugin.get_ca_info()
+        except Exception as e:
+            # The plugin gave an invalid CA, log and continue
+            LOG.error(u._LE("ERROR getting CA from plugin: %s"), e.message)
+            return
 
         old_cas, offset, limit, total = self.ca_repo.get_by_create_date(
             plugin_name=plugin_name,
             suppress_exception=True,
             show_expired=True)
 
-        for old_ca in old_cas:
-            plugin_ca_id = old_ca.plugin_ca_id
-            if plugin_ca_id not in new_ca_infos.keys():
-                # remove CAs that no longer exist
-                self._delete_ca(old_ca)
-            else:
-                # update those that still exist
-                self.ca_repo.update_entity(
-                    old_ca,
-                    new_ca_infos[plugin_ca_id])
+        if old_cas:
+            for old_ca in old_cas:
+                plugin_ca_id = old_ca.plugin_ca_id
+                if plugin_ca_id not in new_ca_infos.keys():
+                    # remove CAs that no longer exist
+                    self._delete_ca(old_ca)
+                else:
+                    # update those that still exist
+                    self.ca_repo.update_entity(
+                        old_ca,
+                        new_ca_infos[plugin_ca_id])
+            old_ids = set([ca.plugin_ca_id for ca in old_cas])
+        else:
+            old_ids = set()
 
-        old_ids = set([ca.plugin_ca_id for ca in old_cas])
         new_ids = set(new_ca_infos.keys())
 
         # add new CAs
         add_ids = new_ids - old_ids
         for add_id in add_ids:
-            self._add_ca(plugin_name, add_id, new_ca_infos[add_id])
+            try:
+                self._add_ca(plugin_name, add_id, new_ca_infos[add_id])
+            except Exception as e:
+                # The plugin gave an invalid CA, log and continue
+                LOG.error(u._LE("ERROR adding CA from plugin: %s"), e.message)
 
     def _add_ca(self, plugin_name, plugin_ca_id, ca_info):
         parsed_ca = dict(ca_info)

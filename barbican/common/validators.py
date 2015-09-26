@@ -17,6 +17,7 @@ import abc
 import base64
 
 import jsonschema as schema
+from ldap3.core import exceptions as ldap_exceptions
 from ldap3.utils.dn import parse_dn
 from OpenSSL import crypto
 from oslo_utils import timeutils
@@ -65,6 +66,9 @@ def validate_ca_id(project_id, order_meta):
     ca = ca_repo.get(ca_id, suppress_exception=True)
     if not ca:
         raise exception.InvalidCAID(ca_id=ca_id)
+
+    if ca.project_id and ca.project_id != project_id:
+        raise exception.UnauthorizedSubCA()
 
     project_ca_repo = repo.get_project_ca_repository()
     project_cas, offset, limit, total = project_ca_repo.get_by_create_date(
@@ -345,9 +349,22 @@ class NewSecretValidator(ValidatorBase):
         return payload.strip()
 
 
+class CACommonHelpersMixin(object):
+    def _validate_subject_dn_data(self, subject_dn):
+        """Confirm that the subject_dn contains valid data
+
+        Validate that the subject_dn string parses without error
+        If not, raise InvalidSubjectDN
+        """
+        try:
+            parse_dn(subject_dn)
+        except ldap_exceptions.LDAPInvalidDnError:
+            raise exception.InvalidSubjectDN(subject_dn=subject_dn)
+
+
 # TODO(atiwari) - Split this validator module and unit tests
 # into smaller modules
-class TypeOrderValidator(ValidatorBase):
+class TypeOrderValidator(ValidatorBase, CACommonHelpersMixin):
     """Validate a new typed order."""
 
     def __init__(self):
@@ -527,17 +544,6 @@ class TypeOrderValidator(ValidatorBase):
         If parsing fails, raise InvalidCMCData
         """
         pass
-
-    def _validate_subject_dn_data(self, subject_dn):
-        """Confirm that the subject_dn contains valid data
-
-        Validate that the subject_dn string parses without error
-        If not, raise InvalidSubjectDN
-        """
-        try:
-            parse_dn(subject_dn)
-        except Exception:
-            raise exception.InvalidSubjectDN(subject_dn=subject_dn)
 
     def _validate_extensions_data(self, extensions):
         """Confirm that the extensions data is valid.
@@ -861,8 +867,8 @@ class ProjectQuotaValidator(ValidatorBase):
                         'secrets': {'type': 'integer'},
                         'orders': {'type': 'integer'},
                         'containers': {'type': 'integer'},
-                        'transport_keys': {'type': 'integer'},
-                        'consumers': {'type': 'integer'}
+                        'consumers': {'type': 'integer'},
+                        'cas': {'type': 'integer'}
                     },
                     'additionalProperties': False,
                 }
@@ -876,4 +882,32 @@ class ProjectQuotaValidator(ValidatorBase):
 
         self._assert_schema_is_valid(json_data, schema_name)
 
+        return json_data
+
+
+class NewCAValidator(ValidatorBase, CACommonHelpersMixin):
+    """Validate new CA(s)."""
+
+    def __init__(self):
+        self.name = 'CA'
+
+        self.schema = {
+            'type': 'object',
+            'properties': {
+                'name': {'type': 'string', "minLength": 1},
+                'subject_dn': {'type': 'string', "minLength": 1},
+                'parent_ca_ref': {'type': 'string', "minLength": 1},
+                'description': {'type': 'string'},
+            },
+            'required': ['name', 'subject_dn', 'parent_ca_ref'],
+            'additionalProperties': False
+        }
+
+    def validate(self, json_data, parent_schema=None):
+        schema_name = self._full_name(parent_schema)
+
+        self._assert_schema_is_valid(json_data, schema_name)
+
+        subject_dn = json_data['subject_dn']
+        self._validate_subject_dn_data(subject_dn)
         return json_data

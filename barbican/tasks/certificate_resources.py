@@ -18,6 +18,7 @@ from OpenSSL import crypto
 
 from barbican.common import exception as excep
 from barbican.common import hrefs
+from barbican.common import resources as res
 import barbican.common.utils as utils
 from barbican.model import models
 from barbican.model import repositories as repos
@@ -63,6 +64,11 @@ ORDER_STATUS_CA_UNAVAIL_FOR_CHECK = models.OrderStatus(
     "cert_ca_unavail_for_status_check",
     "Unable to get certificate request status.  CA unavailable."
 )
+
+
+def refresh_certificate_resources():
+    # Before CA operations can be performed, the CA table must be populated
+    cert.CertificatePluginManager().refresh_ca_table()
 
 
 def issue_certificate_request(order_model, project_model, result_follow_on):
@@ -131,8 +137,10 @@ def _get_cert_plugin(barbican_meta, barbican_meta_for_plugins_dto,
             cert_plugin_name)
     ca_id = _get_ca_id(order_model.meta, project_model.id)
     if ca_id:
-        barbican_meta_for_plugins_dto.plugin_ca_id = ca_id
-        return cert.CertificatePluginManager().get_plugin_by_ca_id(ca_id)
+        ca = repos.get_ca_repository().get(ca_id)
+        barbican_meta_for_plugins_dto.plugin_ca_id = ca.plugin_ca_id
+        return cert.CertificatePluginManager().get_plugin_by_name(
+            ca.plugin_name)
     else:
         return cert.CertificatePluginManager().get_plugin(order_model.meta)
 
@@ -172,6 +180,83 @@ def check_certificate_request(order_model, project_model, result_follow_on):
     return _handle_task_result(
         result, result_follow_on, order_model, project_model, request_type,
         unavailable_status=ORDER_STATUS_CA_UNAVAIL_FOR_CHECK)
+
+
+def create_subordinate_ca(project_model, name, description, subject_dn,
+                          parent_ca_ref, creator_id):
+    """Create a subordinate CA
+
+    :param name - name of the subordinate CA
+    :param: description - description of the subordinate CA
+    :param: subject_dn - subject DN of the subordinate CA
+    :param: parent_ca_ref - Barbican URL reference to the parent CA
+    :param: creator_id - id for creator of the subordinate CA
+    :return: :class models.CertificateAuthority model object for new sub CA
+    """
+    # check that the parent ref exists and is accessible
+    parent_ca_id = hrefs.get_ca_id_from_ref(parent_ca_ref)
+    ca_repo = repos.get_ca_repository()
+    parent_ca = ca_repo.get(entity_id=parent_ca_id, suppress_exception=True)
+    if not parent_ca:
+        raise excep.InvalidParentCA(parent_ca_ref=parent_ca_ref)
+
+    # TODO(alee) check if the parent_ca is accessible for this project
+
+    # get the parent plugin, raises CertPluginNotFound if missing
+    cert_plugin = cert.CertificatePluginManager().get_plugin_by_name(
+        parent_ca.plugin_name)
+
+    # confirm that the plugin supports creating subordinate CAs
+    if not cert_plugin.supports_create_ca():
+        raise excep.SubCAsNotSupported()
+
+    # make call to create the subordinate ca
+    create_ca_dto = cert.CACreateDTO(
+        name=name,
+        description=description,
+        subject_dn=subject_dn,
+        parent_ca_id=parent_ca.plugin_ca_id)
+
+    new_ca_dict = cert_plugin.create_ca(create_ca_dto)
+    if not new_ca_dict:
+        raise excep.SubCANotCreated(name=name)
+
+    # create and store the subordinate CA as a new certificate authority object
+    new_ca_dict['plugin_name'] = parent_ca.plugin_name
+    new_ca_dict['creator_id'] = creator_id
+    new_ca_dict['project_id'] = project_model.id
+    new_ca = models.CertificateAuthority(new_ca_dict)
+    ca_repo.create_from(new_ca)
+
+    return new_ca
+
+
+def delete_subordinate_ca(external_project_id, ca):
+    """Deletes a subordinate CA
+
+    :param external_project_id: external project ID
+    :param ca: class:`models.CertificateAuthority` to be deleted
+    :return: None
+     """
+    # TODO(alee) See if the checks below can be moved to the RBAC code
+    if ca.project_id is None:
+        raise excep.CannotDeleteBaseCA()
+
+    project = repos.get_project_repository().find_by_external_project_id(
+        external_project_id)
+    if ca.project_id != project.id:
+        raise excep.UnauthorizedSubCA()
+
+    cert_plugin = cert.CertificatePluginManager().get_plugin_by_name(
+        ca.plugin_name)
+
+    cert_plugin.delete_ca(ca.plugin_ca_id)
+
+    # Delete the CA from the data model.
+    ca_repo = repos.get_ca_repository()
+    ca_repo.delete_entity_by_id(
+        entity_id=ca.id,
+        external_project_id=external_project_id)
 
 
 def _handle_task_result(result, result_follow_on, order_model,
@@ -231,22 +316,39 @@ def modify_certificate_request(order_model, updated_meta):
     raise NotImplementedError  # pragma: no cover
 
 
-def _get_ca_id(order_meta, project_id):
-    ca_id = order_meta.get(cert.CA_ID)
-    if ca_id:
-        return ca_id
+def get_global_preferred_ca():
+    project = res.get_or_create_global_preferred_project()
+    preferred_ca_repository = repos.get_preferred_ca_repository()
+    cas = preferred_ca_repository.get_project_entities(project.id)
+    if not cas:
+        return None
+    else:
+        return cas[0]
 
+
+def get_project_preferred_ca_id(project_id):
+    """Compute the preferred CA ID for a project
+
+    First priority: a preferred CA is defined for the project
+    Second priority: a preferred CA is defined globally
+    Else: None
+    """
     preferred_ca_repository = repos.get_preferred_ca_repository()
     cas, offset, limit, total = preferred_ca_repository.get_by_create_date(
         project_id=project_id, suppress_exception=True)
     if total > 0:
         return cas[0].ca_id
-
-    global_ca = preferred_ca_repository.get_global_preferred_ca()
+    global_ca = get_global_preferred_ca()
     if global_ca:
         return global_ca.ca_id
 
-    return None
+
+def _get_ca_id(order_meta, project_id):
+    ca_id = order_meta.get(cert.CA_ID)
+    if ca_id:
+        return ca_id
+
+    return get_project_preferred_ca_id(project_id)
 
 
 def _update_result_follow_on(

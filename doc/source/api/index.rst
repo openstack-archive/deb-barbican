@@ -2,19 +2,20 @@
 Barbican API Documentation
 **************************
 
-Quick Start
+User Guide
 ###########
 
 .. toctree::
    :maxdepth: 1
 
-   ./quickstart/secrets
-   ./quickstart/containers
-   ./quickstart/acls
-   ./quickstart/pkcs11keygeneration
-   ./quickstart/certificates
-   ./quickstart/dogtag_setup
-   ./quickstart/quotas
+   ./userguide/secrets
+   ./userguide/containers
+   ./userguide/acls
+   ./userguide/pkcs11keygeneration
+   ./userguide/certificates
+   ./userguide/cas
+   ./userguide/dogtag_setup
+   ./userguide/quotas
 
 API Reference
 #############
@@ -26,4 +27,5 @@ API Reference
     ./reference/containers
     ./reference/acls
     ./reference/certificates
+    ./reference/cas
     ./reference/quotas

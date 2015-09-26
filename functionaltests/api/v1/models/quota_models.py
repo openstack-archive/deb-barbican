@@ -20,13 +20,13 @@ from functionaltests.api.v1.models.base_models import BaseModel
 class QuotasModel(BaseModel):
 
     def __init__(self, secrets=None, orders=None, containers=None,
-                 transport_keys=None, consumers=None):
+                 consumers=None, cas=None):
         super(QuotasModel, self).__init__()
         self.secrets = secrets
         self.orders = orders
         self.containers = containers
-        self.transport_keys = transport_keys
         self.consumers = consumers
+        self.cas = cas
 
 
 class QuotasResponseModel(BaseModel):

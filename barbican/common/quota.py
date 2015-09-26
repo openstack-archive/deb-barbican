@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from oslo_config import cfg
 from oslo_log import log as logging
 
+from barbican.common import config
 from barbican.common import exception
 from barbican.common import hrefs
 from barbican.common import resources as res
@@ -27,31 +27,7 @@ LOG = logging.getLogger(__name__)
 UNLIMITED_VALUE = -1
 DISABLED_VALUE = 0
 
-
-quota_opt_group = cfg.OptGroup(name='quotas',
-                               title='Quota Options')
-
-quota_opts = [
-    cfg.IntOpt('quota_secrets',
-               default=-1,
-               help='Number of secrets allowed per project'),
-    cfg.IntOpt('quota_orders',
-               default=-1,
-               help='Number of orders allowed per project'),
-    cfg.IntOpt('quota_containers',
-               default=-1,
-               help='Number of containers allowed per project'),
-    cfg.IntOpt('quota_transport_keys',
-               default=-1,
-               help='Number of transport keys allowed per project'),
-    cfg.IntOpt('quota_consumers',
-               default=-1,
-               help='Number of consumers allowed per project'),
-]
-
-CONF = cfg.CONF
-CONF.register_group(quota_opt_group)
-CONF.register_opts(quota_opts, group=quota_opt_group)
+CONF = config.CONF
 
 
 class QuotaDriver(object):
@@ -62,8 +38,7 @@ class QuotaDriver(object):
 
     def _get_resources(self):
         """List of resources that can be constrained by a quota"""
-        return ['secrets', 'orders', 'containers', 'transport_keys',
-                'consumers']
+        return ['secrets', 'orders', 'containers', 'consumers', 'cas']
 
     def _get_defaults(self):
         """Return list of default quotas"""
@@ -71,8 +46,8 @@ class QuotaDriver(object):
             'secrets': CONF.quotas.quota_secrets,
             'orders': CONF.quotas.quota_orders,
             'containers': CONF.quotas.quota_containers,
-            'transport_keys': CONF.quotas.quota_transport_keys,
-            'consumers': CONF.quotas.quota_consumers
+            'consumers': CONF.quotas.quota_consumers,
+            'cas': CONF.quotas.quota_cas
         }
         return quotas
 
@@ -96,7 +71,7 @@ class QuotaDriver(object):
         """
         default_quotas = self._get_defaults()
         resp_quotas = dict(configured_quotas)
-        for resource, quota in resp_quotas.iteritems():
+        for resource, quota in resp_quotas.items():
             if quota is None:
                 resp_quotas[resource] = default_quotas[resource]
         return resp_quotas
@@ -135,6 +110,9 @@ class QuotaDriver(object):
         project = res.get_or_create_project(external_project_id)
         self.repo.create_or_update_by_project_id(project.id,
                                                  parsed_project_quotas)
+        # commit to DB to avoid async issues if the enforcer is called from
+        # another thread
+        repo.commit()
 
     def get_project_quotas(self, external_project_id):
         """Retrieve configured quota information from database

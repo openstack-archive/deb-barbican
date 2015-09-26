@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import base64
+import datetime
 
 from Crypto.PublicKey import RSA
 import mock
@@ -153,15 +154,42 @@ class BaseCertificateRequestsTestCase(utils.BaseTestCase):
 
         self.store_plugin = mock.MagicMock()
 
+        parsed_ca = {
+            'plugin_name': "cert_plugin",
+            'plugin_ca_id': "XXXX",
+            'name': "test ca",
+            'description': 'Test CA',
+            'ca_signing_certificate': 'ZZZZZ',
+            'intermediates': 'YYYYY'
+        }
+
+        self.ca = models.CertificateAuthority(parsed_ca)
+        ca_repo.create_from(self.ca)
+        self.ca_id = self.ca.id
+
+        # second ca for testing
+        parsed_ca = {
+            'plugin_name': "cert_plugin",
+            'plugin_ca_id': "XXXX2",
+            'name': "test ca2",
+            'description': 'Test CA2',
+            'ca_signing_certificate': 'ZZZZZ2',
+            'intermediates': 'YYYYY2'
+        }
+
+        self.ca2 = models.CertificateAuthority(parsed_ca)
+        ca_repo.create_from(self.ca2)
+        self.ca_id2 = self.ca2.id
+
         # data for preferred CA and global preferred CA tests
         # add those to the repo in those tests
         self.pref_ca = models.PreferredCertificateAuthority(
             self.project.id,
-            "ca_id")
+            self.ca_id)
 
         self.global_pref_ca = models.PreferredCertificateAuthority(
             1,
-            "ca_id")
+            self.ca_id)
 
         # data for stored key cases
         self.private_key = models.Secret()
@@ -478,7 +506,7 @@ class WhenIssuingCertificateRequests(BaseCertificateRequestsTestCase):
         # code that dave-mccowan is adding.
 
     def test_should_return_for_openssl_stored_key_ca_id_passed_in(self):
-        self.stored_key_meta['ca_id'] = "ca1"
+        self.stored_key_meta['ca_id'] = self.ca_id2
         self._do_pyopenssl_stored_key_request()
         self._verify_issue_certificate_plugins_called()
         self.assertIsNotNone(
@@ -802,3 +830,156 @@ class WhenCheckingCertificateRequests(BaseCertificateRequestsTestCase):
             self.order,
             self.plugin_meta
         )
+
+
+class WhenCreatingSubordinateCAs(utils.BaseTestCase):
+    """Tests the 'create_subordinate_ca()' function."""
+
+    def setUp(self):
+        super(WhenCreatingSubordinateCAs, self).setUp()
+        self.project = res.get_or_create_project('12345')
+        self.project2 = res.get_or_create_project('56789')
+
+        self.subject_name = "cn=subca1 signing certificate, o=example.com"
+        self.creator_id = "user12345"
+        self.name = "Subordinate CA #1"
+        self.description = "This is a test subordinate CA"
+        self.plugin_name = "dogtag_plugin"
+
+        # create parent ca
+        expiration = (datetime.datetime.utcnow() +
+                      datetime.timedelta(minutes=10))
+        parsed_ca = {'plugin_name': self.plugin_name,
+                     'plugin_ca_id': 'ca_master',
+                     'expiration': expiration.isoformat(),
+                     'name': 'Dogtag CA',
+                     'description': 'Master CA for Dogtag plugin',
+                     'ca_signing_certificate': 'XXXXX',
+                     'intermediates': 'YYYYY'}
+
+        self.parent_ca = models.CertificateAuthority(parsed_ca)
+        ca_repo.create_from(self.parent_ca)
+        self.parent_ca_ref = 'https://localhost:6311/cas/' + self.parent_ca.id
+
+        self.new_ca_dict = {
+            'plugin_ca_id': 'ca_subordinate',
+            'expiration': expiration.isoformat(),
+            'name': 'Dogtag Subordinate CA',
+            'description': 'Subordinate CA for Dogtag plugin',
+            'ca_signing_certificate': 'XXXXX',
+            'intermediates': 'YYYYY',
+        }
+
+        # mock plugin and calls to plugin
+        self.cert_plugin = mock.MagicMock()
+        self.cert_plugin.supports_create_ca.return_value = True
+        self.cert_plugin.create_ca.return_value = self.new_ca_dict
+        self._config_cert_plugin()
+
+    def tearDown(self):
+        super(WhenCreatingSubordinateCAs, self).tearDown()
+        self.cert_plugin_patcher.stop()
+
+    def test_should_create_subordinate_ca(self):
+        subca = cert_res.create_subordinate_ca(
+            project_model=self.project,
+            name=self.name,
+            description=self.description,
+            subject_dn=self.subject_name,
+            parent_ca_ref=self.parent_ca_ref,
+            creator_id=self.creator_id
+        )
+        self.assertIsInstance(subca, models.CertificateAuthority)
+        self.assertEqual(self.project.id, subca.project_id)
+        self.assertEqual(self.creator_id, subca.creator_id)
+        self.assertEqual(self.plugin_name, subca.plugin_name)
+
+    def test_should_raise_invalid_parent_ca(self):
+        self.parent_ca_ref = 'https://localhost:6311/cas/' + "BAD-CA-REF"
+        self.assertRaises(
+            excep.InvalidParentCA,
+            cert_res.create_subordinate_ca,
+            project_model=self.project,
+            name=self.name,
+            description=self.description,
+            subject_dn=self.subject_name,
+            parent_ca_ref=self.parent_ca_ref,
+            creator_id=self.creator_id
+        )
+
+    def test_should_raise_subcas_not_supported(self):
+        self.cert_plugin.supports_create_ca.return_value = False
+        self.assertRaises(
+            excep.SubCAsNotSupported,
+            cert_res.create_subordinate_ca,
+            project_model=self.project,
+            name=self.name,
+            description=self.description,
+            subject_dn=self.subject_name,
+            parent_ca_ref=self.parent_ca_ref,
+            creator_id=self.creator_id
+        )
+
+    def test_should_raise_subcas_not_created(self):
+        self.cert_plugin.create_ca.return_value = None
+        self.assertRaises(
+            excep.SubCANotCreated,
+            cert_res.create_subordinate_ca,
+            project_model=self.project,
+            name=self.name,
+            description=self.description,
+            subject_dn=self.subject_name,
+            parent_ca_ref=self.parent_ca_ref,
+            creator_id=self.creator_id
+        )
+
+    def test_should_delete_subca(self):
+        subca = cert_res.create_subordinate_ca(
+            project_model=self.project,
+            name=self.name,
+            description=self.description,
+            subject_dn=self.subject_name,
+            parent_ca_ref=self.parent_ca_ref,
+            creator_id=self.creator_id
+        )
+        self.assertIsInstance(subca, models.CertificateAuthority)
+        cert_res.delete_subordinate_ca(self.project.external_id, subca)
+        self.cert_plugin.delete_ca.assert_called_once_with(subca.plugin_ca_id)
+
+    def test_should_raise_cannot_delete_base_ca(self):
+        self.assertRaises(
+            excep.CannotDeleteBaseCA,
+            cert_res.delete_subordinate_ca,
+            self.project.external_id,
+            self.parent_ca
+        )
+
+    def test_should_raise_unauthorized_subca_delete(self):
+        subca = cert_res.create_subordinate_ca(
+            project_model=self.project,
+            name=self.name,
+            description=self.description,
+            subject_dn=self.subject_name,
+            parent_ca_ref=self.parent_ca_ref,
+            creator_id=self.creator_id
+        )
+        self.assertRaises(
+            excep.UnauthorizedSubCA,
+            cert_res.delete_subordinate_ca,
+            self.project2.external_id,
+            subca
+        )
+
+    def _config_cert_plugin(self):
+        """Mock the certificate plugin manager."""
+        cert_plugin_config = {
+            'return_value.get_plugin.return_value': self.cert_plugin,
+            'return_value.get_plugin_by_name.return_value': self.cert_plugin,
+            'return_value.get_plugin_by_ca_id.return_value': self.cert_plugin
+        }
+        self.cert_plugin_patcher = mock.patch(
+            'barbican.plugin.interface.certificate_manager'
+            '.CertificatePluginManager',
+            **cert_plugin_config
+        )
+        self.cert_plugin_patcher.start()

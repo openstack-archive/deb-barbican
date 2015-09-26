@@ -593,7 +593,7 @@ class SecretRepo(BaseRepo):
     def get_by_create_date(self, external_project_id, offset_arg=None,
                            limit_arg=None, name=None, alg=None, mode=None,
                            bits=0, secret_type=None, suppress_exception=False,
-                           session=None):
+                           session=None, acl_only=None, user_id=None):
         """Returns a list of secrets
 
         The returned secrets are ordered by the date they were created at
@@ -625,8 +625,14 @@ class SecretRepo(BaseRepo):
         if secret_type:
             query = query.filter(models.Secret.secret_type == secret_type)
 
-        query = query.join(models.Project)
-        query = query.filter(models.Project.external_id == external_project_id)
+        if acl_only and acl_only.lower() == 'true' and user_id:
+            query = query.join(models.SecretACL)
+            query = query.join(models.SecretACLUser)
+            query = query.filter(models.SecretACLUser.user_id == user_id)
+        else:
+            query = query.join(models.Project)
+            query = query.filter(
+                models.Project.external_id == external_project_id)
 
         total = query.count()
         end_offset = offset + limit
@@ -1367,12 +1373,17 @@ class TransportKeyRepo(BaseRepo):
 
 
 class CertificateAuthorityRepo(BaseRepo):
-    """Repository for the CertificateAuthority entity."""
+    """Repository for the CertificateAuthority entity.
+
+    CertificateAuthority entries are not soft delete. So there is no
+    need to have deleted=False filter in queries.
+    """
 
     def get_by_create_date(self, offset_arg=None, limit_arg=None,
                            plugin_name=None, plugin_ca_id=None,
                            suppress_exception=False, session=None,
-                           show_expired=False):
+                           show_expired=False, project_id=None,
+                           restrict_to_project_cas=False):
         """Returns a list of certificate authorities
 
         The returned certificate authorities are ordered by the date they
@@ -1380,10 +1391,35 @@ class CertificateAuthorityRepo(BaseRepo):
         """
 
         offset, limit = clean_paging_values(offset_arg, limit_arg)
-
         session = self.get_session(session)
 
-        query = session.query(models.CertificateAuthority)
+        if restrict_to_project_cas:
+            # get both subCAs which have been defined for your project
+            # (cas for which the ca.project_id == project_id) AND
+            # project_cas which are defined for your project
+            # (pca.project_id = project_id)
+            query1 = session.query(models.CertificateAuthority)
+            query1 = query1.filter(
+                models.CertificateAuthority.project_id == project_id)
+
+            query2 = session.query(models.CertificateAuthority)
+            query2 = query2.join(models.ProjectCertificateAuthority)
+            query2 = query2.filter(
+                models.ProjectCertificateAuthority.project_id == project_id)
+
+            query = query1.union(query2)
+        else:
+            # get both subcas that have been defined for your project
+            # (cas for which ca.project_id == project_id) AND
+            # all top-level CAs (ca.project_id == None)
+            # Note(alee) for sqlalchemy, use '== None', not 'is None'
+
+            query = session.query(models.CertificateAuthority)
+            query = query.filter(or_(
+                models.CertificateAuthority.project_id == project_id,
+                models.CertificateAuthority.project_id == None
+            ))
+
         query = query.order_by(models.CertificateAuthority.created_at)
         query = query.filter_by(deleted=False)
 
@@ -1475,6 +1511,15 @@ class CertificateAuthorityRepo(BaseRepo):
         """Sub-class hook: validate values."""
         pass
 
+    def _build_get_project_entities_query(self, project_id, session):
+        """Builds query for retrieving CA related to given project.
+
+        :param project_id: id of barbican project entity
+        :param session: existing db session reference.
+        """
+        return session.query(models.CertificateAuthority).filter_by(
+            project_id=project_id).filter_by(deleted=False)
+
 
 class CertificateAuthorityMetadatumRepo(BaseRepo):
     """Repository for the CertificateAuthorityMetadatum entity
@@ -1530,7 +1575,11 @@ class CertificateAuthorityMetadatumRepo(BaseRepo):
 
 
 class ProjectCertificateAuthorityRepo(BaseRepo):
-    """Repository for the ProjectCertificateAuthority entity."""
+    """Repository for the ProjectCertificateAuthority entity.
+
+    ProjectCertificateAuthority entries are not soft delete. So there is no
+    need to have deleted=False filter in queries.
+    """
 
     def get_by_create_date(self, offset_arg=None, limit_arg=None,
                            project_id=None, ca_id=None,
@@ -1590,13 +1639,15 @@ class ProjectCertificateAuthorityRepo(BaseRepo):
         :param session: existing db session reference.
         """
         return session.query(models.ProjectCertificateAuthority).filter_by(
-            project_id=project_id).filter_by(deleted=False)
+            project_id=project_id)
 
 
 class PreferredCertificateAuthorityRepo(BaseRepo):
-    """Repository for the PreferredCertificateAuthority entity."""
+    """Repository for the PreferredCertificateAuthority entity.
 
-    PREFERRED_PROJECT_ID = "0"
+    PreferredCertificateAuthority entries are not soft delete. So there is no
+    need to have deleted=False filter in queries.
+    """
 
     def get_by_create_date(self, offset_arg=None, limit_arg=None,
                            project_id=None, ca_id=None,
@@ -1613,7 +1664,6 @@ class PreferredCertificateAuthorityRepo(BaseRepo):
 
         query = session.query(models.PreferredCertificateAuthority)
         query = query.order_by(models.PreferredCertificateAuthority.created_at)
-        query = query.filter_by(deleted=False)
 
         if project_id:
             query = query.filter(
@@ -1637,22 +1687,26 @@ class PreferredCertificateAuthorityRepo(BaseRepo):
 
         return entities, offset, limit, total
 
-    def get_global_preferred_ca(self):
-        pref_cas = self.get_project_entities(self.PREFERRED_PROJECT_ID)
-        if len(pref_cas) > 0:
-            return pref_cas[0]
-        return None
+    def create_or_update_by_project_id(self, project_id, ca_id, session=None):
+        """Create or update preferred CA for a project by project_id.
 
-    def update_global_preferred_ca(self, new_ca):
-        self.update_preferred_ca(self.PREFERRED_PROJECT_ID, new_ca)
-
-    def update_preferred_ca(self, project_id, new_ca):
-        session = self.get_session()
-        query = session.query(models.PreferredCertificateAuthority).filter_by(
-            project_id=project_id)
-        entity = query.one()
-        entity.ca_id = new_ca.id
-        entity.save()
+        :param project_id: ID of project whose preferred CA will be saved
+        :param ca_id: ID of preferred CA
+        :param session: SQLAlchemy session object.
+        :return: None
+        """
+        session = self.get_session(session)
+        query = session.query(models.PreferredCertificateAuthority)
+        query = query.filter_by(project_id=project_id)
+        try:
+            entity = query.one()
+        except sa_orm.exc.NoResultFound:
+            self.create_from(
+                models.PreferredCertificateAuthority(project_id, ca_id),
+                session=session)
+        else:
+            entity.ca_id = ca_id
+            entity.save(session)
 
     def _do_entity_name(self):
         """Sub-class hook: return entity name, such as for debugging."""
@@ -1674,7 +1728,7 @@ class PreferredCertificateAuthorityRepo(BaseRepo):
         :param session: existing db session reference.
         """
         return session.query(models.PreferredCertificateAuthority).filter_by(
-            project_id=project_id).filter_by(deleted=False)
+            project_id=project_id)
 
 
 class SecretACLRepo(BaseRepo):

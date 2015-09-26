@@ -263,7 +263,10 @@ class WhenCreatingNewCertificateAuthority(utils.BaseTestCase):
                           'name': 'Dogtag CA',
                           'description': 'Master CA for Dogtag plugin',
                           'ca_signing_certificate': 'XXXXX',
-                          'intermediates': 'YYYYY'}
+                          'intermediates': 'YYYYY',
+                          'creator_id': 'user12345',
+                          'parent_ca_id': '12330-223-22',
+                          'project_id': '12345'}
 
     def test_new_ca_is_created_from_dict(self):
         ca = models.CertificateAuthority(self.parsed_ca)
@@ -278,6 +281,8 @@ class WhenCreatingNewCertificateAuthority(utils.BaseTestCase):
                          ca.ca_meta['intermediates'].value)
         self.assertIsInstance(ca.expiration, datetime.datetime)
         self.assertEqual(ca.created_at, ca.updated_at)
+        self.assertEqual(self.parsed_ca['creator_id'], ca.creator_id)
+        self.assertEqual(self.parsed_ca['project_id'], ca.project_id)
 
 
 class WhenCreatingNewProjectCertificateAuthority(utils.BaseTestCase):
@@ -525,8 +530,8 @@ class WhenCreatingNewProjectQuotas(utils.BaseTestCase):
             'secrets': 101,
             'orders': 102,
             'containers': 103,
-            'transport_keys': 104,
-            'consumers': 105}
+            'consumers': 105,
+            'cas': 106}
         project_quotas = models.ProjectQuotas(project.id,
                                               parsed_project_quotas)
 
@@ -534,8 +539,8 @@ class WhenCreatingNewProjectQuotas(utils.BaseTestCase):
         self.assertEqual(101, project_quotas.secrets)
         self.assertEqual(102, project_quotas.orders)
         self.assertEqual(103, project_quotas.containers)
-        self.assertEqual(104, project_quotas.transport_keys)
         self.assertEqual(105, project_quotas.consumers)
+        self.assertEqual(106, project_quotas.cas)
 
     def test_create_new_project_quotas_with_all_default_quotas(self):
         project = models.Project()
@@ -548,8 +553,8 @@ class WhenCreatingNewProjectQuotas(utils.BaseTestCase):
         self.assertEqual(None, project_quotas.secrets)
         self.assertEqual(None, project_quotas.orders)
         self.assertEqual(None, project_quotas.containers)
-        self.assertEqual(None, project_quotas.transport_keys)
         self.assertEqual(None, project_quotas.consumers)
+        self.assertEqual(None, project_quotas.cas)
 
     def test_create_new_project_quotas_with_some_default_quotas(self):
         project = models.Project()
@@ -566,8 +571,8 @@ class WhenCreatingNewProjectQuotas(utils.BaseTestCase):
         self.assertEqual(101, project_quotas.secrets)
         self.assertEqual(None, project_quotas.orders)
         self.assertEqual(103, project_quotas.containers)
-        self.assertEqual(None, project_quotas.transport_keys)
         self.assertEqual(105, project_quotas.consumers)
+        self.assertEqual(None, project_quotas.cas)
 
     def test_should_throw_exception_missing_project_id(self):
         self.assertRaises(exception.MissingArgumentError,
@@ -581,8 +586,8 @@ class WhenCreatingNewProjectQuotas(utils.BaseTestCase):
             'secrets': 101,
             'orders': 102,
             'containers': 103,
-            'transport_keys': 104,
-            'consumers': 105}
+            'consumers': 105,
+            'cas': 106}
         project_quotas = models.ProjectQuotas(project.id,
                                               parsed_project_quotas)
         self.assertEqual(project.id,
@@ -593,11 +598,10 @@ class WhenCreatingNewProjectQuotas(utils.BaseTestCase):
                          project_quotas.to_dict_fields()['orders'])
         self.assertEqual(103,
                          project_quotas.to_dict_fields()['containers'])
-        self.assertEqual(104,
-                         project_quotas.to_dict_fields()['transport_keys'])
         self.assertEqual(105,
                          project_quotas.to_dict_fields()['consumers'])
-
+        self.assertEqual(106,
+                         project_quotas.to_dict_fields()['cas'])
 
 if __name__ == '__main__':
     unittest.main()

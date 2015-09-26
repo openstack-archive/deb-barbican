@@ -769,7 +769,8 @@ class ContainerConsumerMetadatum(BASE, SoftDeleteMixIn, ModelBase):
             self.name = parsed_request.get('name')
             self.URL = parsed_request.get('URL')
             hash_text = ''.join((self.container_id, self.name, self.URL))
-            self.data_hash = hashlib.sha256(hash_text).hexdigest()
+            self.data_hash = hashlib.sha256(hash_text.
+                                            encode('utf-8')).hexdigest()
             self.status = States.ACTIVE
 
     def _do_extra_dict_fields(self):
@@ -813,7 +814,7 @@ class TransportKey(BASE, SoftDeleteMixIn, ModelBase):
                 'plugin_name': self.plugin_name}
 
 
-class CertificateAuthority(BASE, SoftDeleteMixIn, ModelBase):
+class CertificateAuthority(BASE, ModelBase):
     """CertificateAuthority model to specify the CAs available to Barbican
 
     Represents the CAs available for certificate issuance to Barbican.
@@ -824,6 +825,11 @@ class CertificateAuthority(BASE, SoftDeleteMixIn, ModelBase):
     plugin_name = sa.Column(sa.String(255), nullable=False)
     plugin_ca_id = sa.Column(sa.Text, nullable=False)
     expiration = sa.Column(sa.DateTime, default=None)
+    creator_id = sa.Column(sa.String(255), nullable=True)
+    project_id = sa.Column(
+        sa.String(36),
+        sa.ForeignKey('projects.id', name='cas_project_fk'),
+        nullable=True)
 
     ca_meta = orm.relationship(
         'CertificateAuthorityMetadatum',
@@ -853,6 +859,14 @@ class CertificateAuthority(BASE, SoftDeleteMixIn, ModelBase):
 
         expiration = parsed_ca.pop('expiration', None)
         self.expiration = self._iso_to_datetime(expiration)
+
+        creator_id = parsed_ca.pop('creator_id', None)
+        if creator_id is not None:
+            self.creator_id = creator_id
+
+        project_id = parsed_ca.pop('project_id', None)
+        if project_id is not None:
+            self.project_id = project_id
 
         for key in parsed_ca:
             meta = CertificateAuthorityMetadatum(key, parsed_ca[key])
@@ -921,7 +935,7 @@ class CertificateAuthorityMetadatum(BASE, ModelBase):
         }
 
 
-class ProjectCertificateAuthority(BASE, SoftDeleteMixIn, ModelBase):
+class ProjectCertificateAuthority(BASE, ModelBase):
     """Stores CAs available for a project.
 
     Admins can define a set of CAs that are available for use in a particular
@@ -968,7 +982,7 @@ class ProjectCertificateAuthority(BASE, SoftDeleteMixIn, ModelBase):
                 'ca_id': self.ca_id}
 
 
-class PreferredCertificateAuthority(BASE, SoftDeleteMixIn, ModelBase):
+class PreferredCertificateAuthority(BASE, ModelBase):
     """Stores preferred CAs for any project.
 
     Admins can define a set of CAs available for issuance requests for
@@ -1266,8 +1280,8 @@ class ProjectQuotas(BASE, ModelBase):
     secrets = sa.Column(sa.Integer, nullable=True)
     orders = sa.Column(sa.Integer, nullable=True)
     containers = sa.Column(sa.Integer, nullable=True)
-    transport_keys = sa.Column(sa.Integer, nullable=True)
     consumers = sa.Column(sa.Integer, nullable=True)
+    cas = sa.Column(sa.Integer, nullable=True)
 
     def __init__(self, project_id=None, parsed_project_quotas=None):
         """Creates Project Quotas entity from a project and a dict.
@@ -1290,14 +1304,14 @@ class ProjectQuotas(BASE, ModelBase):
             self.secrets = None
             self.orders = None
             self.containers = None
-            self.transport_keys = None
             self.consumers = None
+            self.cas = None
         else:
             self.secrets = parsed_project_quotas.get('secrets')
             self.orders = parsed_project_quotas.get('orders')
             self.containers = parsed_project_quotas.get('containers')
-            self.transport_keys = parsed_project_quotas.get('transport_keys')
             self.consumers = parsed_project_quotas.get('consumers')
+            self.cas = parsed_project_quotas.get('cas')
 
     def _do_extra_dict_fields(self):
         """Sub-class hook method: return dict of fields."""
@@ -1310,8 +1324,8 @@ class ProjectQuotas(BASE, ModelBase):
             ret['orders'] = self.orders
         if self.containers:
             ret['containers'] = self.containers
-        if self.transport_keys:
-            ret['transport_keys'] = self.transport_keys
         if self.consumers:
             ret['consumers'] = self.consumers
+        if self.cas:
+            ret['cas'] = self.cas
         return ret

@@ -1,5 +1,5 @@
 ************************
-Quotas API - Quick Start
+Quotas API - User Guide
 ************************
 
 Running with default settings, the Barbican REST API doesn't impose an upper
@@ -11,14 +11,14 @@ can exhaust available resources, impacting other projects.
 
 The answer to this, on a per-project basis, is project quotas.
 
-This quick start guide will show you how a user can lookup his current effective
+This user guide will show you how a user can lookup his current effective
 quotas and how a service admin can create, update, read, and delete project quota
 configuration for all projects in his cloud.
 
 This guide will assume you will be using a local running development environment of Barbican.
 If you need assistance with getting set up, please reference the :doc:`development guide </setup/dev>`.
 
-.. _quick_project_quotas_overview:
+.. _user_project_quotas_overview:
 
 Project Quotas Overview
 #######################
@@ -33,7 +33,7 @@ role.  The service administrator's role is defined in Barbican's policy.json fil
 The default role for a service admin is "key-manager:service-admin".
 
 Quotas can be enforced for the following Barbican resources: secrets, containers,
-orders, and consumers.  The configured quota value can be None (use the default),
+orders, consumers, and CAs.  The configured quota value can be None (use the default),
 -1 (unlimited), 0 (disabled), or a positive integer defining the maximum number
 allowed for a project.
 
@@ -61,12 +61,14 @@ in the standard configuration file are as follows.
     # default number of consumers allowed per project
     quota_consumers = -1
 
+    # default number of CAs allowed per project
+    quota_cas = -1
 
 The default quotas are returned via a **GET** on the **quotas** resource when no
 explicit project quotas have been set for the current project.
 
 
-.. _quick_get_quotas:
+.. _user_get_quotas:
 
 How to Read Effective Quotas
 ############################
@@ -92,7 +94,8 @@ with the request.
         {"secrets": -1,
          "orders": -1,
          "containers": -1,
-         "consumers": -1
+         "consumers": -1,
+         "cas": -1
         }
     }
 
@@ -101,7 +104,7 @@ To get more details on the quota lookup API, you can reference the
 :ref:`Get Quotas <get_quotas_request>` documentation.
 
 
-.. _quick_put_project_quotas:
+.. _user_put_project_quotas:
 
 How to Set or Replace Project Quotas
 ####################################
@@ -119,7 +122,8 @@ To set or replace the quotas for the project with the ID 1234:
     curl -i -X PUT -H "content-type:application/json" \
         -H "X-Auth-Token:$TOKEN" \
         -d '{"project_quotas": {"secrets": 500,
-        "orders": 100, "containers": -1, "consumers": 100}}' \
+        "orders": 100, "containers": -1, "consumers": 100,
+        "cas": 50}}' \
         http://localhost:9311/v1/project-quotas/1234
 
     Response:
@@ -131,7 +135,7 @@ To get more details on the project quota setting API you can reference
 the :ref:`Set Project Quotas <put_project_quotas>` documentation.
 
 
-.. _quick_get_project_quotas:
+.. _user_get_project_quotas:
 
 How to Retrieve Configured Project Quotas
 #########################################
@@ -156,10 +160,11 @@ To get project quota information for a single project:
     HTTP/1.1 200 OK
     Content-Type: application/json; charset=UTF-8
     {"project_quotas":
-     {"secrets": 500,
-       "orders": 100,
-        "containers": -1,
-         "consumers": 100}}
+        {"secrets": 500,
+         "orders": 100,
+         "containers": -1,
+         "consumers": 100,
+         "cas": 50}}
 
 
 The project quota information defined for all projects can be retrieved by using
@@ -185,13 +190,15 @@ The returned response contains a list with all project quota data.
           {"secrets": 500,
            "orders": 100,
             "containers": -1,
-             "consumers": 100}},
+             "consumers": 100,
+             "cas": 50}},
        {"project_id": "5678",
         "project_quotas":
           {"secrets": 500,
            "orders": 100,
            "containers": -1,
-           "consumers": 100}}]}
+           "consumers": 100,
+           "cas": 50}}]}
 
 
 To get more details on project quota lookup APIs you can reference
@@ -199,7 +206,7 @@ the :ref:`Get Project Quota <get_project_quotas_uuid>` and
 :ref:`Get Project Quota List <get_project_quotas>` documentation.
 
 
-.. _quick_delete_project_quotas:
+.. _user_delete_project_quotas:
 
 How to Delete Configured Project Quotas
 #######################################
