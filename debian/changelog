@@ -2,6 +2,8 @@ barbican (1:1.0.0~rc1-2) UNRELEASED; urgency=medium
 
   * Added French debconf templates translation thanks to Christian Perrier
     <bubulle@debian.org> (Closes: #799909).
+  * Added Dutch translation of debconf messages thanks to Frans Spiesschaert
+    <Frans.Spiesschaert@yucom.be> (Closes: #799459).
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 07 Oct 2015 16:03:34 +0200
 
