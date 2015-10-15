@@ -17,6 +17,7 @@ from six.moves.urllib import parse
 
 from barbican import api
 from barbican.api import controllers
+from barbican.common import exception as excep
 from barbican.common import hrefs
 from barbican.common import quota
 from barbican.common import resources as res
@@ -144,6 +145,11 @@ class CertificateAuthorityController(controllers.ACLMixin):
                   self.ca.id, external_project_id)
         project_model = res.get_or_create_project(external_project_id)
 
+        # CA must be a base CA or a subCA owned by this project
+        if (self.ca.project_id is not None and
+                self.ca.project_id != project_model.id):
+            raise excep.UnauthorizedSubCA()
+
         project_cas = project_model.cas
         num_cas = len(project_cas)
         for project_ca in project_cas:
@@ -189,19 +195,12 @@ class CertificateAuthorityController(controllers.ACLMixin):
         ca_id = project_ca.ca_id
         preferred_ca = self.preferred_ca_repo.get_project_entities(
             project_id)[0]
-        if self._is_last_project_ca(project_id):
+        if cert_resources.is_last_project_ca(project_id):
             self.preferred_ca_repo.delete_entity_by_id(preferred_ca.id, None)
         else:
             self._assert_is_not_preferred_ca(preferred_ca.ca_id, ca_id)
 
         self.project_ca_repo.delete_entity_by_id(project_ca.id, None)
-
-    def _is_last_project_ca(self, project_id):
-        _cas, _offset, _limit, total = self.project_ca_repo.get_by_create_date(
-            project_id=project_id,
-            suppress_exception=True
-        )
-        return total == 1
 
     def _assert_is_not_preferred_ca(self, preferred_ca_id, ca_id):
         if preferred_ca_id == ca_id:
@@ -248,9 +247,6 @@ class CertificateAuthorityController(controllers.ACLMixin):
     @controllers.handle_exceptions(u._('CA deletion'))
     @controllers.enforce_rbac('certificate_authority:delete')
     def on_delete(self, external_project_id, **kwargs):
-        # ensure user's project exists in DB before calling DB operation
-        res.get_or_create_project(external_project_id)
-
         cert_resources.delete_subordinate_ca(external_project_id, self.ca)
         LOG.info(u._LI('Deleted CA for project: %s'), external_project_id)
 
