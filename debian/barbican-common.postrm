@@ -4,7 +4,7 @@ set -e
 
 if [ "$1" = "purge" ] ; then
 	# Purge config files copied in postinst
-	for i in vassals/barbican-admin.ini vassals/barbican-api.ini barbican-admin-paste.ini barbican-api.conf barbican-api-paste.ini barbican-functional.conf policy.json ; do
+	for i in barbican.conf vassals/barbican-admin.ini vassals/barbican-api.ini barbican-admin-paste.ini barbican-api.conf barbican-api-paste.ini barbican-functional.conf policy.json ; do
 		rm -f /etc/barbican/$i
 	done
 	# and the folders

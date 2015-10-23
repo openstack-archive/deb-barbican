@@ -1,3 +1,9 @@
+barbican (1:1.0.0-2) unstable; urgency=medium
+
+  * Deletes barbican.conf on purge (Closes: #802535).
+
+ -- Thomas Goirand <zigo@debian.org>  Fri, 23 Oct 2015 12:11:10 +0000
+
 barbican (1:1.0.0-1) unstable; urgency=medium
 
   * New upstream release.
