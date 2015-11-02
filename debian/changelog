@@ -1,8 +1,14 @@
-barbican (1:1.0.0-3) UNRELEASED; urgency=medium
+barbican (1:1.0.0-4) unstable; urgency=medium
 
   * Added debian/barbican-common.templates in d/po/POTFILES.in
 
- -- Thomas Goirand <zigo@debian.org>  Sat, 31 Oct 2015 03:42:06 +0100
+ -- Thomas Goirand <zigo@debian.org>  Tue, 03 Nov 2015 09:20:36 +0000
+
+barbican (1:1.0.0-3) unstable; urgency=medium
+
+  * Rebuilt using openstack-pkg-tools to use Keystone v3 API.
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 02 Nov 2015 20:13:02 +0000
 
 barbican (1:1.0.0-2) unstable; urgency=medium
 
