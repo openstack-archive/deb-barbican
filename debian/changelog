@@ -1,3 +1,9 @@
+barbican (1:1.0.0-3) unstable; urgency=medium
+
+  * Rebuilt using openstack-pkg-tools to use Keystone v3 API.
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 02 Nov 2015 20:13:02 +0000
+
 barbican (1:1.0.0-2) unstable; urgency=medium
 
   * Deletes barbican.conf on purge (Closes: #802535).
