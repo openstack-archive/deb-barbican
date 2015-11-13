@@ -5,10 +5,10 @@
 # Américo Monteiro <a_monteiro@gmx.com>, 2015.
 msgid ""
 msgstr ""
-"Project-Id-Version: barbican 2015.1.0-7\n"
+"Project-Id-Version: barbican 1:1.0.0-5\n"
 "Report-Msgid-Bugs-To: barbican@packages.debian.org\n"
 "POT-Creation-Date: 2015-10-31 03:42+0100\n"
-"PO-Revision-Date: 2015-08-28 00:01+0100\n"
+"PO-Revision-Date: 2015-11-04 23:20+0000\n"
 "Last-Translator: Américo Monteiro <a_monteiro@gmx.com>\n"
 "Language-Team: Portuguese <traduz@debianpt.org>\n"
 "Language: pt\n"
@@ -59,8 +59,8 @@ msgid ""
 "Please enter the IP address of the Keystone server, so that barbican-api can "
 "contact Keystone to do the Barbican service and endpoint creation."
 msgstr ""
-"Por favor indique o endereço IP do servidor Keystone, para que o barbican-"
-"api possa contactar o Keystone para fazer o serviço Barbican e a criação do "
+"Por favor indique o endereço IP do servidor Keystone, para que o barbican-api "
+"possa contactar o Keystone para fazer o serviço Barbican e a criação do "
 "\"endpoint\"."
 
 #. Type: password
@@ -126,7 +126,7 @@ msgstr ""
 #. Description
 #: ../barbican-common.templates:2001
 msgid "Set up a database for Barbican?"
-msgstr ""
+msgstr "Configurar uma base de dados para o Barbican?"
 
 #. Type: boolean
 #. Description
@@ -135,6 +135,8 @@ msgid ""
 "No database has been set up for Barbican to use. Before continuing, you "
 "should make sure you have the following information:"
 msgstr ""
+"Nenhuma base de dados foi configurada para o Barbican usar. Antes de "
+"continuar, você deve certificar-se que tem a seguinte informação:"
 
 #. Type: boolean
 #. Description
@@ -146,6 +148,11 @@ msgid ""
 "   machine);\n"
 " * a username and password to access the database."
 msgstr ""
+" * o tipo de base de dados que deseja usar;\n"
+" * o nome de máquina do servidor da base de dados (esse servidor deve "
+"permitir ligações TCP a partir desta\n"
+"   máquina);\n"
+" * um nome de utilizador e palavra passe para aceder à base de dados."
 
 #. Type: boolean
 #. Description
@@ -154,6 +161,8 @@ msgid ""
 "If some of these requirements are missing, do not choose this option and run "
 "with regular SQLite support."
 msgstr ""
+"Se alguns destes requerimentos estão em falta, não escolha esta opção e "
+"corra com o suporte SQLite regular."
 
 #. Type: boolean
 #. Description
@@ -162,12 +171,14 @@ msgid ""
 "You can change this setting later on by running \"dpkg-reconfigure -plow "
 "barbican-common\"."
 msgstr ""
+"Você pode modificar estas definições mais tarde ao correr \"dpkg-reconfigure "
+"-plow barbican-common\"."
 
 #. Type: string
 #. Description
 #: ../barbican-common.templates:3001
 msgid "Authentication server hostname:"
-msgstr ""
+msgstr "Nome de máquina do servidor de autenticação:"
 
 #. Type: string
 #. Description
@@ -176,6 +187,9 @@ msgid ""
 "Please specify the hostname of the authentication server. Typically this is "
 "also the hostname of the OpenStack Identity Service (Keystone)."
 msgstr ""
+"Por favor especifique o nome de máquina do servidor de autenticação. "
+"Tipicamente este é também o nome de máquina do Serviço de Identidade "
+"OpenStack (Keystone)."
 
 #. Type: string
 #. Description
@@ -188,7 +202,7 @@ msgstr ""
 #. proprietaire ("tenant")
 #: ../barbican-common.templates:4001
 msgid "Authentication server tenant name:"
-msgstr ""
+msgstr "Nome \"tenant\" do servidor de autenticação:"
 
 #. Type: string
 #. Description
@@ -201,37 +215,40 @@ msgstr ""
 #. proprietaire ("tenant")
 #: ../barbican-common.templates:4001
 msgid "Please specify the authentication server tenant name."
-msgstr ""
+msgstr "Por favor especifique o nome \"tenant\" do servidor de autenticação."
 
 #. Type: string
 #. Description
 #: ../barbican-common.templates:5001
 msgid "Authentication server username:"
-msgstr ""
+msgstr "Nome de utilizador do servidor de autenticação:"
 
 #. Type: string
 #. Description
 #: ../barbican-common.templates:5001
 msgid "Please specify the username to use with the authentication server."
 msgstr ""
+"Por favor especifique o nome de utilizador a usar com o servidor de "
+"autenticação."
 
 #. Type: password
 #. Description
 #: ../barbican-common.templates:6001
 msgid "Authentication server password:"
-msgstr ""
+msgstr "Palavra passe do servidor de autenticação:"
 
 #. Type: password
 #. Description
 #: ../barbican-common.templates:6001
 msgid "Please specify the password to use with the authentication server."
 msgstr ""
+"Por favor especifique a palavra passe a usar com o servidor de autenticação."
 
 #. Type: string
 #. Description
 #: ../barbican-common.templates:7001
 msgid "IP address of your RabbitMQ host:"
-msgstr ""
+msgstr "Endereço IP da sua máquina RabbitMQ:"
 
 #. Type: string
 #. Description
@@ -245,33 +262,39 @@ msgid ""
 "In order to interoperate with other components of OpenStack, this package "
 "needs to connect to a central RabbitMQ server."
 msgstr ""
+"De modo a interagir com outros componentes do OpenStack, este pacote precisa "
+"de ligar a um servidor RabbitMQ central."
 
 #. Type: string
 #. Description
 #: ../barbican-common.templates:7001
 msgid "Please specify the IP address of that server."
-msgstr ""
+msgstr "Por favor especifique o endereço IP desse servidor."
 
 #. Type: string
 #. Description
 #: ../barbican-common.templates:8001
 msgid "Username for connection to the RabbitMQ server:"
-msgstr ""
+msgstr "Nome de utilizador para ligação ao servidor RabbitMQ:"
 
 #. Type: string
 #. Description
 #: ../barbican-common.templates:8001
 msgid "Please specify the username used to connect to the RabbitMQ server."
 msgstr ""
+"Por favor especifique o nome de utilizador a usar para ligação ao servidor "
+"RabbitMQ."
 
 #. Type: password
 #. Description
 #: ../barbican-common.templates:9001
 msgid "Password for connection to the RabbitMQ server:"
-msgstr ""
+msgstr "Palavra passe para ligação ao servidor RabbitMQ:"
 
 #. Type: password
 #. Description
 #: ../barbican-common.templates:9001
 msgid "Please specify the password used to connect to the RabbitMQ server."
 msgstr ""
+"Por favor especifique a palavra passe a usar para ligação ao servidor "
+"RabbitMQ."
