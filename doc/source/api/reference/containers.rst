@@ -33,13 +33,13 @@ Response Attributes
 +------------+---------+--------------------------------------------------------+
 | total      | integer | The total number of containers available to the user   |
 +------------+---------+--------------------------------------------------------+
-| next       | string  | A HATEOS url to retrieve the next set of containers    |
+| next       | string  | A HATEOAS url to retrieve the next set of containers   |
 |            |         | based on the offset and limit parameters. This         |
 |            |         | attribute is only available when the total number of   |
 |            |         | containers is greater than offset and limit parameter  |
 |            |         | combined.                                              |
 +------------+---------+--------------------------------------------------------+
-| previous   | string  | A HATEOS url to retrieve the previous set of           |
+| previous   | string  | A HATEOAS url to retrieve the previous set of          |
 |            |         | containers based on the offset and limit parameters.   |
 |            |         | This attribute is only available when the request      |
 |            |         | offset is greater than 0.                              |
@@ -48,7 +48,7 @@ Response Attributes
 Request:
 ********
 
-.. code-block:: none
+.. code-block:: javascript
 
     GET /v1/containers
     Headers:
@@ -58,7 +58,7 @@ Request:
 Request:
 ********
 
-.. code-block:: json
+.. code-block:: javascript
 
     {
         "containers": [
@@ -114,7 +114,7 @@ Response Attributes
 Request:
 ********
 
-.. code-block:: none
+.. code-block:: javascript
 
     GET /v1/containers/{uuid}
     Headers:
@@ -123,7 +123,7 @@ Request:
 Response:
 *********
 
-.. code-block:: json
+.. code-block:: javascript
 
     {
         "type": "generic",
@@ -157,7 +157,7 @@ HTTP Status Codes
 
 
 POST /v1/containers
-#########################
+###################
 
 Create a container
 
@@ -198,7 +198,7 @@ Request Attributes
 Request:
 ********
 
-.. code-block:: none
+.. code-block:: javascript
 
     POST /v1/containers
     Headers:
@@ -220,7 +220,7 @@ Request:
 Response:
 *********
 
-.. code-block:: json
+.. code-block:: javascript
 
     {
         "container_ref": "https://{barbican_host}/v1/containers/{container_uuid}"
@@ -251,7 +251,7 @@ Deletes a container
 Request:
 ********
 
-.. code-block:: none
+.. code-block:: javascript
 
     DELETE /v1/containers/{container_uuid}
     Headers:
@@ -260,7 +260,7 @@ Request:
 Response:
 *********
 
-.. code-block:: none
+.. code-block:: javascript
 
     204 No Content
 

@@ -820,7 +820,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
 
     def test_delete_with_null_metadata_values(self):
         metadata = {kss.KMIPSecretStore.KEY_UUID: None}
-        self.assertEqual(None, self.secret_store.delete_secret(metadata))
+        self.assertIsNone(self.secret_store.delete_secret(metadata))
 
     def test_delete_secret_assert_called(self):
         metadata = {kss.KMIPSecretStore.KEY_UUID: self.symmetric_key_uuid}
@@ -831,7 +831,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
     def test_delete_secret_return_value(self):
         metadata = {kss.KMIPSecretStore.KEY_UUID: self.symmetric_key_uuid}
         return_value = self.secret_store.delete_secret(metadata)
-        self.assertEqual(None, return_value)
+        self.assertIsNone(return_value)
 
     def test_delete_secret_server_error_occurs(self):
         self.secret_store.client.proxy.destroy = mock.MagicMock(
@@ -917,4 +917,4 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
             CONF = kss.CONF
             CONF.kmip_plugin.keyfile = '/some/path'
             kss.KMIPSecretStore(CONF)
-            self.assertEqual(len(m.mock_calls), 1)
+            self.assertEqual(1, len(m.mock_calls))

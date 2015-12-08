@@ -12,13 +12,12 @@
 #  License for the specific language governing permissions and limitations
 #  under the License.
 import argparse
-
 import six
 
 from barbican.plugin.crypto import pkcs11
 
 
-class KeyGenerator:
+class KeyGenerator(object):
 
     def __init__(self, ffi=None):
         self.parser = self.get_main_parser()
@@ -92,7 +91,7 @@ class KeyGenerator:
     def generate_mkek(self, args):
         """Process the generate MKEK with given arguments"""
         self.verify_label_does_not_exist(args.label, self.session)
-        self.pkcs11.generate_mkek(args.label, args.length, self.session)
+        self.pkcs11.generate_mkek(args.label, int(args.length), self.session)
         print ("MKEK successfully generated!")
 
     def generate_hmac(self, args):
@@ -106,7 +105,7 @@ class KeyGenerator:
         try:
             self.args.func(self.args)
         except Exception as e:
-            print e
+            print(e)
         finally:
             self.pkcs11.close_session(self.session)
 

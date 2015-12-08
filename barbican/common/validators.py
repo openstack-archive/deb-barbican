@@ -180,7 +180,7 @@ class NewSecretValidator(ValidatorBase):
         self.schema = {
             "type": "object",
             "properties": {
-                "name": {"type": "string", "maxLength": 255},
+                "name": {"type": ["string", "null"], "maxLength": 255},
                 "algorithm": {"type": "string", "maxLength": 255},
                 "mode": {"type": "string", "maxLength": 255},
                 "bit_length": {
@@ -200,7 +200,10 @@ class NewSecretValidator(ValidatorBase):
                              secret_store.SecretType.CERTIFICATE,
                              secret_store.SecretType.OPAQUE]
                 },
-                "payload_content_type": {"type": "string", "maxLength": 255},
+                "payload_content_type": {
+                    "type": ["string", "null"],
+                    "maxLength": 255
+                },
                 "payload_content_encoding": {
                     "type": "string",
                     "maxLength": 255,
@@ -242,6 +245,7 @@ class NewSecretValidator(ValidatorBase):
                                                        payload, schema_name)
             json_data['payload'] = payload
         elif 'payload_content_type' in json_data:
+            # parent_schema would be populated if it comes from an order.
             self._assert_validity(parent_schema is not None, schema_name,
                                   u._("payload must be provided when "
                                       "payload_content_type is specified"),
@@ -569,6 +573,12 @@ class TypeOrderValidator(ValidatorBase, CACommonHelpersMixin):
                                   "for {0} type order").format(order_type),
                               "meta")
 
+        self._assert_validity(meta.get('bit_length'),
+                              schema_name,
+                              u._("'bit_length' is required field "
+                                  "for {0} type order").format(order_type),
+                              "meta")
+
         self._validate_bit_length(meta, schema_name)
 
     def _extract_expiration(self, json_data, schema_name):
@@ -590,15 +600,7 @@ class TypeOrderValidator(ValidatorBase, CACommonHelpersMixin):
 
     def _validate_bit_length(self, meta, schema_name):
 
-        bit_length = int(meta.get('bit_length', 0))
-        if bit_length <= 0:
-            raise exception.UnsupportedField(field="bit_length",
-                                             schema=schema_name,
-                                             reason=u._("Must have "
-                                                        "non-zero positive"
-                                                        " bit_length to"
-                                                        " generate secret"
-                                                        ))
+        bit_length = int(meta.get('bit_length'))
         if bit_length % 8 != 0:
             raise exception.UnsupportedField(field="bit_length",
                                              schema=schema_name,

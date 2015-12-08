@@ -15,6 +15,7 @@
 
 import base64
 import datetime
+import six
 import unittest
 
 import testtools
@@ -146,12 +147,16 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
         self.secret_req['name'] = '    '
         self.validator.validate(self.secret_req)
 
+    def test_should_validate_null_name(self):
+        self.secret_req['name'] = None
+        self.validator.validate(self.secret_req)
+
     def test_should_validate_no_payload(self):
         del self.secret_req['payload']
         del self.secret_req['payload_content_type']
         result = self.validator.validate(self.secret_req)
 
-        self.assertFalse('payload' in result)
+        self.assertNotIn('payload', result)
 
     def test_should_validate_payload_with_whitespace(self):
         self.secret_req['payload'] = '  ' + self.payload + '    '
@@ -163,14 +168,14 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
         self.secret_req['expiration'] = '2114-02-28T19:14:44.180394'
         result = self.validator.validate(self.secret_req)
 
-        self.assertTrue('expiration' in result)
+        self.assertIn('expiration', result)
         self.assertTrue(isinstance(result['expiration'], datetime.datetime))
 
     def test_should_validate_future_expiration_no_t(self):
         self.secret_req['expiration'] = '2114-02-28 19:14:44.180394'
         result = self.validator.validate(self.secret_req)
 
-        self.assertTrue('expiration' in result)
+        self.assertIn('expiration', result)
         self.assertTrue(isinstance(result['expiration'], datetime.datetime))
 
     def test_should_validate_expiration_with_z(self):
@@ -178,7 +183,7 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
         self.secret_req['expiration'] = expiration
         result = self.validator.validate(self.secret_req)
 
-        self.assertTrue('expiration' in result)
+        self.assertIn('expiration', result)
         self.assertTrue(isinstance(result['expiration'], datetime.datetime))
         self.assertEqual(expiration[:-1], str(result['expiration']))
 
@@ -187,7 +192,7 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
         self.secret_req['expiration'] = expiration
         result = self.validator.validate(self.secret_req)
 
-        self.assertTrue('expiration' in result)
+        self.assertIn('expiration', result)
         self.assertTrue(isinstance(result['expiration'], datetime.datetime))
         expected = expiration[:-6].replace('12', '17', 1)
         self.assertEqual(expected, str(result['expiration']))
@@ -197,7 +202,7 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
         self.secret_req['expiration'] = expiration
         result = self.validator.validate(self.secret_req)
 
-        self.assertTrue('expiration' in result)
+        self.assertIn('expiration', result)
         self.assertTrue(isinstance(result['expiration'], datetime.datetime))
         expected = expiration[:-12].replace('12', '17', 1)
         self.assertEqual(expected, str(result['expiration']))
@@ -206,12 +211,21 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
         self.secret_req['expiration'] = '  '
         result = self.validator.validate(self.secret_req)
 
-        self.assertTrue('expiration' in result)
+        self.assertIn('expiration', result)
         self.assertTrue(not result['expiration'])
 
     def test_should_raise_numeric_name(self):
         self.secret_req['name'] = 123
 
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.secret_req,
+        )
+        self.assertEqual('name', exception.invalid_property)
+
+    def test_should_raise_name_length_is_greater_than_max(self):
+        self.secret_req['name'] = 'a' * 256
         exception = self.assertRaises(
             excep.InvalidObject,
             self.validator.validate,
@@ -240,6 +254,50 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
         )
         self.assertEqual('bit_length', exception.invalid_property)
         self.assertIn('bit_length', exception.message)
+
+    def test_should_raise_bit_length_less_than_min(self):
+        self.secret_req['bit_length'] = 0
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.secret_req,
+        )
+        self.assertEqual('bit_length', exception.invalid_property)
+        self.assertIn('bit_length', exception.message)
+
+    def test_should_raise_bit_length_greater_than_max(self):
+        self.secret_req['bit_length'] = 32768
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.secret_req,
+        )
+        self.assertEqual('bit_length', exception.invalid_property)
+        self.assertIn('bit_length', exception.message)
+
+    def test_should_raise_mode_length_greater_than_max(self):
+        self.secret_req['mode'] = 'a' * 256
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.secret_req,
+        )
+        self.assertEqual('mode', exception.invalid_property)
+        self.assertIn('mode', exception.message)
+
+    def test_should_raise_mode_is_non_string(self):
+        self.secret_req['mode'] = 123
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.secret_req,
+        )
+        self.assertEqual('mode', exception.invalid_property)
+        self.assertIn('mode', exception.message)
 
     def test_validation_should_raise_with_empty_payload(self):
         self.secret_req['payload'] = '   '
@@ -273,6 +331,50 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
         )
         self.assertEqual('expiration', exception.invalid_property)
         self.assertIn('expiration', exception.message)
+
+    def test_should_raise_expiration_is_non_string(self):
+        self.secret_req['expiration'] = 123
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.secret_req,
+        )
+        self.assertEqual('expiration', exception.invalid_property)
+        self.assertIn('expiration', exception.message)
+
+    def test_should_raise_expiration_greater_than_max(self):
+        self.secret_req['expiration'] = 'a' * 256
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.secret_req,
+        )
+        self.assertEqual('expiration', exception.invalid_property)
+        self.assertIn('expiration', exception.message)
+
+    def test_should_raise_algorithm_is_non_string(self):
+        self.secret_req['algorithm'] = 123
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.secret_req,
+        )
+        self.assertEqual('algorithm', exception.invalid_property)
+        self.assertIn('algorithm', exception.message)
+
+    def test_should_raise_algorithm_greater_than_max(self):
+        self.secret_req['algorithm'] = 'a' * 256
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.secret_req,
+        )
+        self.assertEqual('algorithm', exception.invalid_property)
+        self.assertIn('algorithm', exception.message)
 
     def test_should_raise_all_nulls(self):
         self.secret_req = {'name': None,
@@ -344,6 +446,27 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
             self.validator.validate,
             self.secret_req,
         )
+
+    def test_should_raise_payload_content_type_greater_than_max(self):
+        self.secret_req['payload_content_type'] = 'a' * 256
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.secret_req,
+        )
+        self.assertEqual('payload_content_type', exception.invalid_property)
+        self.assertIn('payload_content_type', exception.message)
+
+    def test_should_raise_with_payload_content_encoding_greater_than_max(self):
+        self.secret_req['payload_content_encoding'] = 'a' * 256
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.secret_req,
+        )
+        self.assertEqual('payload_content_encoding',
+                         exception.invalid_property)
+        self.assertIn('payload_content_encoding', exception.message)
 
     def test_should_raise_with_plain_text_and_encoding(self):
         self.secret_req['payload_content_encoding'] = 'base64'
@@ -903,6 +1026,50 @@ class WhenTestingTransportKeyValidator(utils.BaseTestCase):
 
         self.assertEqual('transport_key', exception.invalid_property)
 
+    def test_should_raise_transport_key_is_non_string(self):
+        self.transport_req['transport_key'] = 123
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.transport_req
+        )
+
+        self.assertEqual('transport_key', exception.invalid_property)
+
+    def test_should_raise_transport_key_is_missing(self):
+        del self.transport_req['transport_key']
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.transport_req
+        )
+
+        self.assertEqual('transport_key', exception.invalid_property)
+
+    def test_should_raise_plugin_name_is_non_string(self):
+        self.transport_req['plugin_name'] = 123
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.transport_req
+        )
+
+        self.assertEqual('plugin_name', exception.invalid_property)
+
+    def test_should_raise_plugin_name_is_missing(self):
+        del self.transport_req['plugin_name']
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.transport_req
+        )
+
+        self.assertEqual('plugin_name', exception.invalid_property)
+
 
 class WhenTestingConsumerValidator(utils.BaseTestCase):
 
@@ -979,11 +1146,16 @@ class WhenTestingKeyTypeOrderValidator(utils.BaseTestCase):
         result = self.validator.validate(self.key_order_req)
         self.assertEqual('certificate', result['type'])
 
+    def test_should_pass_with_null_content_type_in_meta(self):
+        self.key_order_req['meta']['payload_content_type'] = None
+        result = self.validator.validate(self.key_order_req)
+        self.assertIsNone(result['meta']['payload_content_type'])
+
     def test_should_pass_good_bit_meta_in_order_refs(self):
         self.key_order_req['meta']['algorithm'] = 'AES'
         self.key_order_req['meta']['bit_length'] = 256
         result = self.validator.validate(self.key_order_req)
-        self.assertTrue(result['meta']['expiration'] is None)
+        self.assertIsNone(result['meta']['expiration'])
 
     def test_should_pass_good_exp_meta_in_order_refs(self):
         self.key_order_req['meta']['algorithm'] = 'AES'
@@ -993,7 +1165,7 @@ class WhenTestingKeyTypeOrderValidator(utils.BaseTestCase):
         self.key_order_req['meta']['expiration'] = date_after_year_str
         result = self.validator.validate(self.key_order_req)
 
-        self.assertTrue('expiration' in result['meta'])
+        self.assertIn('expiration', result['meta'])
         self.assertTrue(isinstance(result['meta']['expiration'],
                                    datetime.datetime))
 
@@ -1028,6 +1200,31 @@ class WhenTestingKeyTypeOrderValidator(utils.BaseTestCase):
                           self.validator.validate,
                           self.key_order_req)
 
+    def test_should_raise_with_no_bit_length_in_order_refs(self):
+        del self.key_order_req['meta']['bit_length']
+
+        exception = self.assertRaises(excep.InvalidObject,
+                                      self.validator.validate,
+                                      self.key_order_req)
+        self.assertIn("bit_length' is required field for key type order",
+                      six.text_type(exception))
+
+    def test_should_raise_with_zero_bit_length_in_order_refs(self):
+        self.key_order_req['meta']['bit_length'] = 0
+
+        exception = self.assertRaises(excep.InvalidObject,
+                                      self.validator.validate,
+                                      self.key_order_req)
+        self.assertEqual('bit_length', exception.invalid_property)
+
+    def test_should_raise_with_negative_bit_length_in_order_refs(self):
+        self.key_order_req['meta']['bit_length'] = -1
+
+        exception = self.assertRaises(excep.InvalidObject,
+                                      self.validator.validate,
+                                      self.key_order_req)
+        self.assertEqual('bit_length', exception.invalid_property)
+
     def test_should_raise_with_wrong_exp_meta_in_order_refs(self):
         self.key_order_req['meta']['algorithm'] = 'AES'
         self.key_order_req['meta']['expiration'] = '2014-02-28T19:14:44.180394'
@@ -1042,7 +1239,7 @@ class WhenTestingKeyTypeOrderValidator(utils.BaseTestCase):
         del self.key_order_req['meta']['mode']
 
         result = self.validator.validate(self.key_order_req)
-        self.assertTrue(result is not None)
+        self.assertIsNotNone(result)
         self.assertTrue(result['meta']['algorithm'] == 'hmacsha1')
 
     def test_should_raise_with_payload_in_order(self):
@@ -1090,6 +1287,32 @@ class WhenTestingAsymmetricTypeOrderValidator(utils.BaseTestCase):
         self.asymmetric_order_req['meta']['algorithm'] = 'aes'
         result = self.validator.validate(self.asymmetric_order_req)
         self.assertIsNone(result['meta']['expiration'])
+
+    def test_should_raise_with_no_bit_length_in_asymmetric_order_refs(self):
+        del self.asymmetric_order_req['meta']['bit_length']
+
+        exception = self.assertRaises(excep.InvalidObject,
+                                      self.validator.validate,
+                                      self.asymmetric_order_req)
+        self.assertIn(
+            "bit_length' is required field for asymmetric key type order",
+            six.text_type(exception))
+
+    def test_should_raise_with_zero_bit_length_in_asymmetric_order_refs(self):
+        self.asymmetric_order_req['meta']['bit_length'] = 0
+
+        exception = self.assertRaises(excep.InvalidObject,
+                                      self.validator.validate,
+                                      self.asymmetric_order_req)
+        self.assertEqual("bit_length", exception.invalid_property)
+
+    def test_should_raise_with_negative_bit_len_in_asymmetric_order_refs(self):
+        self.asymmetric_order_req['meta']['bit_length'] = -1
+
+        exception = self.assertRaises(excep.InvalidObject,
+                                      self.validator.validate,
+                                      self.asymmetric_order_req)
+        self.assertEqual("bit_length", exception.invalid_property)
 
 
 class WhenTestingSimpleCMCOrderValidator(utils.BaseTestCase):
@@ -1392,6 +1615,30 @@ class WhenTestingProjectQuotasValidator(utils.BaseTestCase):
         self.assertRaises(excep.InvalidObject,
                           self.validator.validate,
                           {})
+
+    def test_should_raise_secrets_non_int(self):
+        self.good_project_quotas['project_quotas']['secrets'] = "abc"
+        self.assertRaises(excep.InvalidObject,
+                          self.validator.validate,
+                          self.good_project_quotas)
+
+    def test_should_raise_orders_non_int(self):
+        self.good_project_quotas['project_quotas']['orders'] = "abc"
+        self.assertRaises(excep.InvalidObject,
+                          self.validator.validate,
+                          self.good_project_quotas)
+
+    def test_should_raise_containers_non_int(self):
+        self.good_project_quotas['project_quotas']['containers'] = "abc"
+        self.assertRaises(excep.InvalidObject,
+                          self.validator.validate,
+                          self.good_project_quotas)
+
+    def test_should_raise_cas_non_int(self):
+        self.good_project_quotas['project_quotas']['cas'] = "abc"
+        self.assertRaises(excep.InvalidObject,
+                          self.validator.validate,
+                          self.good_project_quotas)
 
 
 @utils.parameterized_test_case

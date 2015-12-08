@@ -15,6 +15,7 @@
 import os
 import uuid
 
+from barbican.common import config
 from barbican.common import exception
 from barbican.model import repositories
 from barbican.tests.api.controllers import test_secrets as secret_helper
@@ -106,13 +107,13 @@ class WhenCreatingContainersUsingContainersResource(
         )
         self.assertEqual(400, resp.status_int)
 
-    def test_should_raise_container_no_content_type_header(self):
+    def test_should_raise_container_bad_content_type_header(self):
         resp, container_uuid = create_container(
             self.app,
             name='test container name',
             container_type='generic',
             expect_errors=True,
-            headers={'Content-Type': ''}
+            headers={'Content-Type': 'bad_content_type'}
         )
         self.assertEqual(415, resp.status_int)
 
@@ -126,6 +127,7 @@ class WhenCreatingContainersUsingContainersResource(
         self.assertNotIn(self.project_id, resp.headers['Location'])
 
     def test_should_throw_exception_when_secret_ref_doesnt_exist(self):
+        config.CONF.set_override("host_href", "http://localhost:9311")
         secret_refs = [
             {
                 'name': 'bad secret',
@@ -140,6 +142,7 @@ class WhenCreatingContainersUsingContainersResource(
             expect_errors=True,
         )
         self.assertEqual(404, resp.status_int)
+        config.CONF.clear_override('host_href')
 
 
 class WhenGettingContainersListUsingContainersResource(
@@ -183,18 +186,18 @@ class WhenGettingContainersListUsingContainersResource(
             self.params
         )
         self.assertEqual(200, resp.status_int)
-        self.assertTrue('previous' in resp.namespace)
-        self.assertTrue('next' in resp.namespace)
+        self.assertIn('previous', resp.namespace)
+        self.assertIn('next', resp.namespace)
 
         url_nav_next = self._create_url(self.offset + self.limit, self.limit)
-        self.assertEqual(1, resp.body.count(url_nav_next))
+        self.assertEqual(1, resp.body.decode('utf-8').count(url_nav_next))
 
         url_nav_prev = self._create_url(0, self.limit)
-        self.assertEqual(1, resp.body.count(url_nav_prev))
+        self.assertEqual(1, resp.body.decode('utf-8').count(url_nav_prev))
 
         url_hrefs = self._create_url()
         self.assertEqual((self.limit + 2),
-                         resp.body.count(url_hrefs))
+                         resp.body.decode('utf-8').count(url_hrefs))
 
     def test_response_should_include_total(self):
         self._create_containers()
@@ -212,8 +215,8 @@ class WhenGettingContainersListUsingContainersResource(
             self.params
         )
         self.assertEqual(0, resp.namespace['total'])
-        self.assertFalse('previous' in resp.namespace)
-        self.assertFalse('next' in resp.namespace)
+        self.assertNotIn('previous', resp.namespace)
+        self.assertNotIn('next', resp.namespace)
 
 
 class WhenGettingOrDeletingContainerUsingContainerResource(

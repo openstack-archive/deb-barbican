@@ -207,8 +207,8 @@ class CertificateEventPluginBase(object):
         """Notify that a certificate has been generated and is ready to use.
 
         :param project_id: Project ID associated with this certificate
-        :param order_ref: HATEOS reference URI to the submitted Barbican Order
-        :param container_ref: HATEOS reference URI to the Container storing
+        :param order_ref: HATEOAS reference URI to the submitted Barbican Order
+        :param container_ref: HATEOAS reference URI to the Container storing
                the certificate
         :returns: None
         """
@@ -220,7 +220,7 @@ class CertificateEventPluginBase(object):
         """Notify that the certificate authority (CA) isn't available.
 
         :param project_id: Project ID associated with this order
-        :param order_ref: HATEOS reference URI to the submitted Barbican Order
+        :param order_ref: HATEOAS reference URI to the submitted Barbican Order
         :param error_msg: Error message if it is available
         :param retry_in_msec: Delay before attempting to talk to the CA again.
                If this is 0, then no attempt will be made.
@@ -645,7 +645,7 @@ class CertificatePluginManager(named.NamedExtensionManager):
         try:
             new_ca_infos = cert_plugin.get_ca_info()
         except Exception as e:
-            # The plugin gave an invalid CA, log and continue
+            # The plugin gave an invalid CA, log and return
             LOG.error(u._LE("ERROR getting CA from plugin: %s"), e.message)
             return
 
