@@ -2,16 +2,14 @@ Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: barbican
 Source: git://github.com/openstack/barbican.git
 
-Files: debian/*
-Copyright: (c) 2015, Thomas Goirand <zigo@debian.org>
+Files: *
+Copyright: (c) 2010, US Government as represented by the Administrator of NASA
+           (c) 2010-2016, OpenStack foundation <openstack-dev@lists.openstack.org>
+           (c) 2010-2016, manu contributors (see individual files)
 License: Apache-2.0
 
-Files: *
-Copyright: (c) 2010, United States Government as represented by the
-                     Administrator of the National Aeronautics and Space
-                     Administration.
-           (c) 2010-2011, OpenStack LLC
-           (c) 2012, OpenStack foundation <openstack-dev@lists.openstack.org>
+Files: debian/*
+Copyright: (c) 2015-2016, Thomas Goirand <zigo@debian.org>
 License: Apache-2.0
 
 License: Apache-2.0
