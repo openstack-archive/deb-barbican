@@ -1,0 +1,25 @@
+Description: Remove image hosted on rackspace
+Author: Thomas Goirand <zigo@debian.org>
+Bug-Ubuntu: https://launchpad.net/bugs/1542588
+Last-Update: 2016-02-06
+
+--- barbican-2.0.0~b2.orig/doc/source/contribute/architecture.rst
++++ barbican-2.0.0~b2/doc/source/contribute/architecture.rst
+@@ -12,7 +12,7 @@ Overall Architecture
+ 
+ The next figure presents an overall logical diagram for Barbican.
+ 
+-.. image:: http://0a5aa9029f70acecc898-b578de5fa5a4bf8c8b1d7c616994834b.r11.cf1.rackcdn.com/barbican-overall-architecture.gif
++Image removed by Debian maintainer because of a privacy breach.
+ 
+ The API node(s) handle incoming REST requests to Barbican. These nodes can
+ interact with the database directly if the request can be completed
+@@ -35,7 +35,7 @@ logging.
+ 
+ The next figure examines the components within Barbican.
+ 
+-.. image:: http://0a5aa9029f70acecc898-b578de5fa5a4bf8c8b1d7c616994834b.r11.cf1.rackcdn.com/barbican-components.gif
++Image removed by Debian maintainer because of a privacy breach.
+ 
+ Several potential clients of the Barbican REST interface are noted, including
+ `Castellan <https://github.com/openstack/castellan>`_ which presents a generic

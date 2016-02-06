@@ -2,6 +2,7 @@ barbican (1:2.0.0~b2-2) experimental; urgency=medium
 
   * Updated nl.po debconf translation (Closes: #806492).
   * VCS URLs using HTTPS.
+  * Added removed-image-hosted-on-rackspace-cdn.patch.
 
  -- Thomas Goirand <zigo@debian.org>  Sat, 06 Feb 2016 05:29:10 +0000
 
