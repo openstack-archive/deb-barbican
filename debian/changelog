@@ -1,6 +1,7 @@
 barbican (1:2.0.0~b3-1) experimental; urgency=medium
 
   * New upstream release.
+  * Fixed (build-)depends for this release.
 
  -- Thomas Goirand <zigo@debian.org>  Mon, 07 Mar 2016 22:11:22 +0800
 
