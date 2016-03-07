@@ -1,3 +1,2 @@
 fix-barbican-api.conf-as-parsable.patch
 fixes-keystone_authtoken-in-config-file.patch
-removed-image-hosted-on-rackspace-cdn.patch

@@ -7,7 +7,7 @@ Index: barbican/etc/barbican/barbican-api-paste.ini
 ===================================================================
 --- barbican.orig/etc/barbican/barbican-api-paste.ini
 +++ barbican/etc/barbican/barbican-api-paste.ini
-@@ -39,11 +39,14 @@ paste.filter_factory = barbican.api.midd
+@@ -46,11 +46,14 @@ audit_map_file = /etc/barbican/api_audit
  [filter:keystone_authtoken]
  paste.filter_factory = keystonemiddleware.auth_token:filter_factory
  #need ability to re-auth a token, thus admin url
