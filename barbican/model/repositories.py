@@ -21,6 +21,7 @@ quite intense for sqlalchemy, and maybe could be simplified.
 """
 
 import logging
+import sys
 import time
 import uuid
 
@@ -64,6 +65,7 @@ _PROJECT_CA_REPOSITORY = None
 _PROJECT_QUOTAS_REPOSITORY = None
 _SECRET_ACL_REPOSITORY = None
 _SECRET_META_REPOSITORY = None
+_SECRET_USER_META_REPOSITORY = None
 _SECRET_REPOSITORY = None
 _TRANSPORT_KEY_REPOSITORY = None
 
@@ -145,7 +147,8 @@ def clear():
     Typically performed at the end of a request cycle, after a
     commit() or rollback().
     """
-    _SESSION_FACTORY.remove()
+    if _SESSION_FACTORY:  # not initialized in some unit test
+        _SESSION_FACTORY.remove()
 
 
 def get_session():
@@ -175,14 +178,18 @@ def _get_engine(engine):
         if CONF.sql_pool_max_overflow:
             engine_args['max_overflow'] = CONF.sql_pool_max_overflow
 
+        db_connection = None
         try:
             engine = _create_engine(connection, **engine_args)
-            engine.connect()
+            db_connection = engine.connect()
         except Exception as err:
             msg = u._("Error configuring registry database with supplied "
                       "sql_connection. Got error: {error}").format(error=err)
             LOG.exception(msg)
             raise exception.BarbicanException(msg)
+        finally:
+            if db_connection:
+                db_connection.close()
 
         if CONF.db_auto_create:
             meta = sqlalchemy.MetaData()
@@ -273,6 +280,8 @@ def clean_paging_values(offset_arg=0, limit_arg=CONF.default_limit_paging):
     try:
         offset = int(offset_arg)
         if offset < 0:
+            offset = 0
+        if offset > sys.maxsize:
             offset = 0
     except ValueError:
         offset = 0
@@ -749,18 +758,13 @@ class SecretStoreMetadatumRepo(BaseRepo):
 
         session = get_session()
 
-        try:
-            query = session.query(models.SecretStoreMetadatum)
-            query = query.filter_by(deleted=False)
+        query = session.query(models.SecretStoreMetadatum)
+        query = query.filter_by(deleted=False)
 
-            query = query.filter(
-                models.SecretStoreMetadatum.secret_id == secret_id)
+        query = query.filter(
+            models.SecretStoreMetadatum.secret_id == secret_id)
 
-            metadata = query.all()
-
-        except sa_orm.exc.NoResultFound:
-            metadata = {}
-
+        metadata = query.all()
         return {m.key: m.value for m in metadata}
 
     def _do_entity_name(self):
@@ -770,6 +774,77 @@ class SecretStoreMetadatumRepo(BaseRepo):
     def _do_build_get_query(self, entity_id, external_project_id, session):
         """Sub-class hook: build a retrieve query."""
         query = session.query(models.SecretStoreMetadatum)
+        return query.filter_by(id=entity_id)
+
+    def _do_validate(self, values):
+        """Sub-class hook: validate values."""
+        pass
+
+
+class SecretUserMetadatumRepo(BaseRepo):
+    """Repository for the SecretUserMetadatum entity
+
+    Stores key/value information on behalf of a Secret.
+    """
+
+    def create_replace_user_metadata(self, secret_id, metadata):
+        """Creates or replaces the the specified metadata for the secret."""
+        now = timeutils.utcnow()
+
+        session = get_session()
+        query = session.query(models.SecretUserMetadatum)
+        query = query.filter_by(secret_id=secret_id)
+        query.delete()
+
+        for k, v in metadata.items():
+            meta_model = models.SecretUserMetadatum(k, v)
+            meta_model.secret_id = secret_id
+            meta_model.updated_at = now
+            meta_model.save(session=session)
+
+    def get_metadata_for_secret(self, secret_id):
+        """Returns a dict of SecretUserMetadatum instances."""
+        session = get_session()
+
+        query = session.query(models.SecretUserMetadatum)
+        query = query.filter_by(deleted=False)
+
+        query = query.filter(
+            models.SecretUserMetadatum.secret_id == secret_id)
+
+        metadata = query.all()
+        return {m.key: m.value for m in metadata}
+
+    def create_replace_user_metadatum(self, secret_id, key, value):
+        now = timeutils.utcnow()
+
+        session = get_session()
+        query = session.query(models.SecretUserMetadatum)
+        query = query.filter_by(secret_id=secret_id)
+        query = query.filter_by(key=key)
+        query.delete()
+
+        meta_model = models.SecretUserMetadatum(key, value)
+        meta_model.secret_id = secret_id
+        meta_model.updated_at = now
+        meta_model.save(session=session)
+
+    def delete_metadatum(self, secret_id, key):
+        """Removes a key from a SecretUserMetadatum instances."""
+        session = get_session()
+
+        query = session.query(models.SecretUserMetadatum)
+        query = query.filter_by(secret_id=secret_id)
+        query = query.filter_by(key=key)
+        query.delete()
+
+    def _do_entity_name(self):
+        """Sub-class hook: return entity name, such as for debugging."""
+        return "SecretUserMetadatum"
+
+    def _do_build_get_query(self, entity_id, external_project_id, session):
+        """Sub-class hook: build a retrieve query."""
+        query = session.query(models.SecretUserMetadatum)
         return query.filter_by(id=entity_id)
 
     def _do_validate(self, values):
@@ -1778,7 +1853,7 @@ class SecretACLRepo(BaseRepo):
         If user_ids list is not None, then following change is made.
         For existing acl users, just update timestamp if user_id is present in
         input user ids list. Otherwise, remove existing acl user entries.
-        Then add the remainining input user ids as new acl user db entries.
+        Then add the remaining input user ids as new acl user db entries.
         """
         if user_ids is None:
             return
@@ -1873,7 +1948,7 @@ class ContainerACLRepo(BaseRepo):
         If user_ids list is not None, then following change is made.
         For existing acl users, just update timestamp if user_id is present in
         input user ids list. Otherwise, remove existing acl user entries.
-        Then add the remainining input user ids as new acl user db entries.
+        Then add the remaining input user ids as new acl user db entries.
         """
         if user_ids is None:
             return
@@ -2142,6 +2217,13 @@ def get_secret_meta_repository():
     """Returns a singleton Secret meta repository instance."""
     global _SECRET_META_REPOSITORY
     return _get_repository(_SECRET_META_REPOSITORY, SecretStoreMetadatumRepo)
+
+
+def get_secret_user_meta_repository():
+    """Returns a singleton Secret user meta repository instance."""
+    global _SECRET_USER_META_REPOSITORY
+    return _get_repository(_SECRET_USER_META_REPOSITORY,
+                           SecretUserMetadatumRepo)
 
 
 def get_secret_repository():

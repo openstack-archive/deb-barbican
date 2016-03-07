@@ -227,7 +227,7 @@ class WhenTestingPKCS11(utils.BaseTestCase):
         ct = self.pkcs11.encrypt(mock.MagicMock(), pt, mock.MagicMock())
 
         self.assertEqual(ct['ct'][:len(pt)], pt[::-1])
-        self.assertTrue(len(ct['iv']) > 0)
+        self.assertGreater(len(ct['iv']), 0)
 
         self.assertEqual(self.lib.C_GenerateRandom.call_count, 2)
         self.assertEqual(self.lib.C_EncryptInit.call_count, 1)
@@ -244,9 +244,64 @@ class WhenTestingPKCS11(utils.BaseTestCase):
         self.assertEqual(self.lib.C_DecryptInit.call_count, 1)
         self.assertEqual(self.lib.C_Decrypt.call_count, 1)
 
+    def test_decrypt_with_pad(self):
+        ct = b'\x03\x03\x03CBA9876543210' + b'0' * self.pkcs11.gcmtagsize
+        iv = b'0' * self.pkcs11.blocksize
+        pt = self.pkcs11.decrypt(mock.MagicMock(), iv, ct, mock.MagicMock())
+
+        pt_len = len(ct) - self.pkcs11.gcmtagsize - 3
+        self.assertEqual(pt[:pt_len], ct[3:-self.pkcs11.gcmtagsize][::-1])
+
+        self.assertEqual(self.lib.C_DecryptInit.call_count, 1)
+        self.assertEqual(self.lib.C_Decrypt.call_count, 1)
+
+    def test_decrypt_with_pad_new_iv(self):
+        ct = b'\x03\x03\x03CBA9876543210' + b'0' * self.pkcs11.gcmtagsize
+        iv = b'0' * self.pkcs11.gcmtagsize
+        pt = self.pkcs11.decrypt(mock.MagicMock(), iv, ct, mock.MagicMock())
+
+        pt_len = len(ct) - self.pkcs11.gcmtagsize
+        self.assertEqual(pt[:pt_len], ct[:-self.pkcs11.gcmtagsize][::-1])
+
+        self.assertEqual(self.lib.C_DecryptInit.call_count, 1)
+        self.assertEqual(self.lib.C_Decrypt.call_count, 1)
+
+    def test_decrypt_with_pad_wrong_size(self):
+        ct = b'\x03\x03\x03CBA987654321' + b'0' * self.pkcs11.gcmtagsize
+        iv = b'0' * self.pkcs11.blocksize
+        pt = self.pkcs11.decrypt(mock.MagicMock(), iv, ct, mock.MagicMock())
+
+        pt_len = len(ct) - self.pkcs11.gcmtagsize
+        self.assertEqual(pt[:pt_len], ct[:-self.pkcs11.gcmtagsize][::-1])
+
+        self.assertEqual(self.lib.C_DecryptInit.call_count, 1)
+        self.assertEqual(self.lib.C_Decrypt.call_count, 1)
+
+    def test_decrypt_with_pad_wrong_length(self):
+        ct = b'\x03EDCBA9876543210' + b'0' * self.pkcs11.gcmtagsize
+        iv = b'0' * self.pkcs11.blocksize
+        pt = self.pkcs11.decrypt(mock.MagicMock(), iv, ct, mock.MagicMock())
+
+        pt_len = len(ct) - self.pkcs11.gcmtagsize
+        self.assertEqual(pt[:pt_len], ct[:-self.pkcs11.gcmtagsize][::-1])
+
+        self.assertEqual(self.lib.C_DecryptInit.call_count, 1)
+        self.assertEqual(self.lib.C_Decrypt.call_count, 1)
+
+    def test_decrypt_with_too_large_pad(self):
+        ct = b'\x11EDCBA9876543210' + b'0' * self.pkcs11.gcmtagsize
+        iv = b'0' * self.pkcs11.blocksize
+        pt = self.pkcs11.decrypt(mock.MagicMock(), iv, ct, mock.MagicMock())
+
+        pt_len = len(ct) - self.pkcs11.gcmtagsize
+        self.assertEqual(pt[:pt_len], ct[:-self.pkcs11.gcmtagsize][::-1])
+
+        self.assertEqual(self.lib.C_DecryptInit.call_count, 1)
+        self.assertEqual(self.lib.C_Decrypt.call_count, 1)
+
     def test_wrap_key(self):
         wkek = self.pkcs11.wrap_key(mock.Mock(), mock.Mock(), mock.Mock())
-        self.assertTrue(len(wkek['iv']) > 0)
+        self.assertGreater(len(wkek['iv']), 0)
         self.assertEqual(wkek['wrapped_key'], b'0' * 16)
 
         self.assertEqual(self.lib.C_GenerateRandom.call_count, 2)

@@ -62,6 +62,8 @@ def build_wsgi_app(controller=None, transactional=False):
         hooks=request_hooks,
         force_canonical=False
     )
+    # clear the session created in controller initialization     60
+    repositories.clear()
     return wsgi_app
 
 
@@ -76,8 +78,8 @@ def main_app(func):
         config.setup_remote_pydev_debug()
 
         # Initializing the database engine and session factory before the app
-        # starts ensures we don't lose requests due to lazy initialiation of db
-        # connections.
+        # starts ensures we don't lose requests due to lazy initialization of
+        # db connections.
         repositories.setup_database_engine_and_factory()
 
         wsgi_app = func(global_config, **local_conf)

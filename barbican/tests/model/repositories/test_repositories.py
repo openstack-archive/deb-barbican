@@ -84,13 +84,21 @@ class WhenCleaningRepositoryPagingParameters(utils.BaseTestCase):
         self.assertEqual(1, clean_offset)
         self.assertEqual(1, clean_limit)
 
-    def test_limit_ist_too_big(self):
+    def test_limit_is_too_big(self):
         """Limit should max out at configured value."""
         limit = self.CONF.max_limit_paging + 10
         clean_offset, clean_limit = repositories.clean_paging_values(
             offset_arg=1,
             limit_arg=limit)
         self.assertEqual(self.CONF.max_limit_paging, clean_limit)
+
+    def test_offset_is_too_big(self):
+        """When Offset exceeds sys.maxsize, it should be zero."""
+        clean_offset, clean_limit = repositories.clean_paging_values(
+            offset_arg=265613988875874769338781322035779626829233452653394495,
+            limit_arg=self.default_limit)
+        self.assertEqual(0, clean_offset)
+        self.assertEqual(self.default_limit, clean_limit)
 
 
 class WhenInvokingExceptionMethods(utils.BaseTestCase):
@@ -202,8 +210,10 @@ class WhenTestingWrapDbError(utils.BaseTestCase):
 
     def setUp(self):
         super(WhenTestingWrapDbError, self).setUp()
-        repositories.CONF.set_override("sql_max_retries", 0)
-        repositories.CONF.set_override("sql_retry_interval", 0)
+        repositories.CONF.set_override("sql_max_retries", 0,
+                                       enforce_type=True)
+        repositories.CONF.set_override("sql_retry_interval", 0,
+                                       enforce_type=True)
 
     @mock.patch('barbican.model.repositories.is_db_connection_error')
     def test_should_raise_operational_error_is_connection_error(
@@ -225,7 +235,8 @@ class WhenTestingGetEnginePrivate(utils.BaseTestCase):
     def setUp(self):
         super(WhenTestingGetEnginePrivate, self).setUp()
 
-        repositories.CONF.set_override("sql_connection", "connection")
+        repositories.CONF.set_override("sql_connection", "connection",
+                                       enforce_type=True)
 
     @mock.patch('barbican.model.repositories._create_engine')
     def test_should_raise_value_exception_engine_create_failure(
@@ -248,7 +259,8 @@ class WhenTestingGetEnginePrivate(utils.BaseTestCase):
     def test_should_complete_with_no_alembic_create_default_configs(
             self, mock_create_engine):
 
-        repositories.CONF.set_override("db_auto_create", False)
+        repositories.CONF.set_override("db_auto_create", False,
+                                       enforce_type=True)
         engine = mock.MagicMock()
         mock_create_engine.return_value = engine
 
@@ -267,11 +279,14 @@ class WhenTestingGetEnginePrivate(utils.BaseTestCase):
     def test_should_complete_with_no_alembic_create_pool_configs(
             self, mock_create_engine):
 
-        repositories.CONF.set_override("db_auto_create", False)
+        repositories.CONF.set_override("db_auto_create", False,
+                                       enforce_type=True)
         repositories.CONF.set_override(
-            "sql_pool_class", "QueuePool")
-        repositories.CONF.set_override("sql_pool_size", 22)
-        repositories.CONF.set_override("sql_pool_max_overflow", 11)
+            "sql_pool_class", "QueuePool", enforce_type=True)
+        repositories.CONF.set_override("sql_pool_size", 22,
+                                       enforce_type=True)
+        repositories.CONF.set_override("sql_pool_max_overflow", 11,
+                                       enforce_type=True)
 
         engine = mock.MagicMock()
         mock_create_engine.return_value = engine
@@ -332,7 +347,8 @@ class WhenTestingMigrations(utils.BaseTestCase):
 
     def setUp(self):
         super(WhenTestingMigrations, self).setUp()
-        repositories.CONF.set_override("sql_connection", "connection")
+        repositories.CONF.set_override("sql_connection", "connection",
+                                       enforce_type=True)
         self.alembic_config = migration.init_config()
         self.alembic_config.barbican_config = cfg.CONF
 

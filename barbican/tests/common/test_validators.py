@@ -169,14 +169,14 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
         result = self.validator.validate(self.secret_req)
 
         self.assertIn('expiration', result)
-        self.assertTrue(isinstance(result['expiration'], datetime.datetime))
+        self.assertIsInstance(result['expiration'], datetime.datetime)
 
     def test_should_validate_future_expiration_no_t(self):
         self.secret_req['expiration'] = '2114-02-28 19:14:44.180394'
         result = self.validator.validate(self.secret_req)
 
         self.assertIn('expiration', result)
-        self.assertTrue(isinstance(result['expiration'], datetime.datetime))
+        self.assertIsInstance(result['expiration'], datetime.datetime)
 
     def test_should_validate_expiration_with_z(self):
         expiration = '2114-02-28 19:14:44.180394Z'
@@ -184,7 +184,7 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
         result = self.validator.validate(self.secret_req)
 
         self.assertIn('expiration', result)
-        self.assertTrue(isinstance(result['expiration'], datetime.datetime))
+        self.assertIsInstance(result['expiration'], datetime.datetime)
         self.assertEqual(expiration[:-1], str(result['expiration']))
 
     def test_should_validate_expiration_with_tz(self):
@@ -193,7 +193,7 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
         result = self.validator.validate(self.secret_req)
 
         self.assertIn('expiration', result)
-        self.assertTrue(isinstance(result['expiration'], datetime.datetime))
+        self.assertIsInstance(result['expiration'], datetime.datetime)
         expected = expiration[:-6].replace('12', '17', 1)
         self.assertEqual(expected, str(result['expiration']))
 
@@ -203,7 +203,7 @@ class WhenTestingSecretValidator(utils.BaseTestCase):
         result = self.validator.validate(self.secret_req)
 
         self.assertIn('expiration', result)
-        self.assertTrue(isinstance(result['expiration'], datetime.datetime))
+        self.assertIsInstance(result['expiration'], datetime.datetime)
         expected = expiration[:-12].replace('12', '17', 1)
         self.assertEqual(expected, str(result['expiration']))
 
@@ -584,7 +584,8 @@ class WhenTestingContainerValidator(utils.BaseTestCase):
     def setUp(self):
         super(WhenTestingContainerValidator, self).setUp()
 
-        validators.CONF.set_override("host_href", "http://localhost:9311")
+        validators.CONF.set_override("host_href", "http://localhost:9311",
+                                     enforce_type=True)
 
         self.name = 'name'
         self.type = 'generic'
@@ -626,6 +627,27 @@ class WhenTestingContainerValidator(utils.BaseTestCase):
         )
         self.assertEqual('name', exception.invalid_property)
         self.assertIn('name', exception.message)
+
+    def test_should_raise_nonstring_secret_name(self):
+        self.secret_refs[0]["name"] = 5
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.container_req,
+        )
+
+        self.assertEqual('secret_refs', exception.invalid_property)
+
+    def test_should_raise_secret_name_too_long(self):
+        self.secret_refs[0]['name'] = 'a' * 256
+
+        exception = self.assertRaises(
+            excep.InvalidObject,
+            self.validator.validate,
+            self.container_req,
+        )
+        self.assertEqual('secret_refs', exception.invalid_property)
 
     def test_should_raise_numeric_name(self):
         self.container_req['name'] = 123
@@ -817,7 +839,8 @@ class WhenTestingRSAContainerValidator(utils.BaseTestCase):
     def setUp(self):
         super(WhenTestingRSAContainerValidator, self).setUp()
 
-        validators.CONF.set_override("host_href", "http://localhost:9311")
+        validators.CONF.set_override("host_href", "http://localhost:9311",
+                                     enforce_type=True)
 
         self.name = 'name'
         self.type = 'rsa'
@@ -932,7 +955,8 @@ class WhenTestingCertificateContainerValidator(utils.BaseTestCase):
     def setUp(self):
         super(WhenTestingCertificateContainerValidator, self).setUp()
 
-        validators.CONF.set_override("host_href", "http://localhost:9311")
+        validators.CONF.set_override("host_href", "http://localhost:9311",
+                                     enforce_type=True)
 
         self.name = 'name'
         self.type = 'certificate'
@@ -1178,8 +1202,8 @@ class WhenTestingKeyTypeOrderValidator(utils.BaseTestCase):
         result = self.validator.validate(self.key_order_req)
 
         self.assertIn('expiration', result['meta'])
-        self.assertTrue(isinstance(result['meta']['expiration'],
-                                   datetime.datetime))
+        self.assertIsInstance(result['meta']['expiration'],
+                              datetime.datetime)
 
     def test_should_raise_with_no_type_in_order_refs(self):
         del self.key_order_req['type']
@@ -1252,7 +1276,7 @@ class WhenTestingKeyTypeOrderValidator(utils.BaseTestCase):
 
         result = self.validator.validate(self.key_order_req)
         self.assertIsNotNone(result)
-        self.assertTrue(result['meta']['algorithm'] == 'hmacsha1')
+        self.assertEqual('hmacsha1', result['meta']['algorithm'])
 
     def test_should_raise_with_payload_in_order(self):
         self.key_order_req['meta']['payload'] = 'payload'
@@ -1716,6 +1740,220 @@ class WhenTestingNewCAValidator(utils.BaseTestCase):
             self.new_ca_req
         )
 
+
+@utils.parameterized_test_case
+class WhenTestingSecretMetadataValidator(utils.BaseTestCase):
+
+    def setUp(self):
+        super(WhenTestingSecretMetadataValidator, self).setUp()
+
+        self.top_key = 'metadata'
+
+        self.key1 = 'city'
+        self.value1 = 'Austin'
+
+        self.key2 = 'state'
+        self.value2 = 'Texas'
+
+        self.key3 = 'country'
+        self.value3 = 'USA'
+
+        self.metadata_req = {
+            self.top_key: {
+                self.key1: self.value1,
+                self.key2: self.value2,
+                self.key3: self.value3
+            }
+        }
+
+        self.validator = validators.NewSecretMetadataValidator()
+
+    def test_should_validate_all_fields(self):
+        self.validator.validate(self.metadata_req)
+
+    def test_should_validate_all_fields_and_make_key_lowercase(self):
+        self.key1 = "DOgg"
+        self.value1 = "poodle"
+        self.metadata_req = {
+            self.top_key: {
+                self.key1: self.value1,
+                self.key2: self.value2,
+                self.key3: self.value3
+            }
+        }
+        metadata = self.validator.validate(self.metadata_req)
+        self.assertNotIn("DOgg", metadata.keys())
+        self.assertIn("dogg", metadata.keys())
+
+    def test_should_validate_no_keys(self):
+        del self.metadata_req[self.top_key][self.key1]
+        del self.metadata_req[self.top_key][self.key2]
+        del self.metadata_req[self.top_key][self.key3]
+        self.validator.validate(self.metadata_req)
+
+    def test_should_raise_invalid_key_no_metadata(self):
+        del self.metadata_req[self.top_key]
+        exception = self.assertRaises(excep.InvalidObject,
+                                      self.validator.validate,
+                                      self.metadata_req)
+        self.assertIn("metadata' is a required property",
+                      six.text_type(exception))
+
+    def test_should_raise_invalid_key_non_string(self):
+        self.key1 = 0
+        metadata_req = {
+            self.top_key: {
+                self.key1: self.value1
+            }
+        }
+        exception = self.assertRaises(excep.InvalidMetadataRequest,
+                                      self.validator.validate,
+                                      metadata_req)
+        self.assertIn("Invalid Metadata. Keys and Values must be Strings.",
+                      six.text_type(exception))
+
+    def test_should_raise_invalid_key_non_url_safe_string(self):
+        self.key1 = "key/01"
+        metadata_req = {
+            self.top_key: {
+                self.key1: self.value1
+            }
+        }
+        exception = self.assertRaises(excep.InvalidMetadataKey,
+                                      self.validator.validate,
+                                      metadata_req)
+        self.assertIn("Invalid Key. Key must be URL safe.",
+                      six.text_type(exception))
+
+    def test_should_raise_invalid_value_non_string(self):
+        self.value1 = 0
+        metadata_req = {
+            self.top_key: {
+                self.key1: self.value1
+            }
+        }
+        exception = self.assertRaises(excep.InvalidMetadataRequest,
+                                      self.validator.validate,
+                                      metadata_req)
+        self.assertIn("Invalid Metadata. Keys and Values must be Strings.",
+                      six.text_type(exception))
+
+
+@utils.parameterized_test_case
+class WhenTestingSecretMetadatumValidator(utils.BaseTestCase):
+
+    def setUp(self):
+        super(WhenTestingSecretMetadatumValidator, self).setUp()
+
+        self.key1 = 'key'
+        self.value1 = 'city'
+
+        self.key2 = 'value'
+        self.value2 = 'Austin'
+
+        self.metadata_req = {
+            self.key1: self.value1,
+            self.key2: self.value2
+        }
+
+        self.validator = validators.NewSecretMetadatumValidator()
+
+    def test_should_validate_all_fields(self):
+        self.validator.validate(self.metadata_req)
+
+    def test_should_validate_all_fields_and_make_key_lowercase(self):
+        self.value1 = "DOgg"
+        self.value2 = "poodle"
+        self.metadata_req = {
+            self.key1: self.value1,
+            self.key2: self.value2
+        }
+        metadata = self.validator.validate(self.metadata_req)
+        self.assertEqual("dogg", metadata['key'])
+
+    def test_should_raise_invalid_empty(self):
+        del self.metadata_req[self.key1]
+        del self.metadata_req[self.key2]
+        exception = self.assertRaises(excep.InvalidObject,
+                                      self.validator.validate,
+                                      self.metadata_req)
+        self.assertIn("Provided object does not match schema "
+                      "'SecretMetadatum'",
+                      six.text_type(exception))
+
+    def test_should_raise_invalid_key_no_key(self):
+        del self.metadata_req[self.key2]
+        exception = self.assertRaises(excep.InvalidObject,
+                                      self.validator.validate,
+                                      self.metadata_req)
+        self.assertIn("Provided object does not match schema "
+                      "'SecretMetadatum'",
+                      six.text_type(exception))
+
+    def test_should_raise_invalid_key_no_value(self):
+        del self.metadata_req[self.key1]
+        exception = self.assertRaises(excep.InvalidObject,
+                                      self.validator.validate,
+                                      self.metadata_req)
+        self.assertIn("Provided object does not match schema "
+                      "'SecretMetadatum'",
+                      six.text_type(exception))
+
+    def test_should_raise_invalid_key_non_string(self):
+        self.value1 = 0
+        metadata_req = {
+            self.key1: self.value1,
+            self.key2: self.value2
+        }
+
+        exception = self.assertRaises(excep.InvalidObject,
+                                      self.validator.validate,
+                                      metadata_req)
+        self.assertIn("Provided object does not match schema "
+                      "'SecretMetadatum'",
+                      six.text_type(exception))
+
+    def test_should_raise_invalid_key_non_url_safe_string(self):
+        self.value1 = "key/01"
+        metadata_req = {
+            self.key1: self.value1,
+            self.key2: self.value2
+        }
+
+        exception = self.assertRaises(excep.InvalidMetadataKey,
+                                      self.validator.validate,
+                                      metadata_req)
+        self.assertIn("Invalid Key. Key must be URL safe.",
+                      six.text_type(exception))
+
+    def test_should_raise_invalid_value_non_string(self):
+        self.value2 = 0
+        metadata_req = {
+            self.key1: self.value1,
+            self.key2: self.value2
+        }
+
+        exception = self.assertRaises(excep.InvalidObject,
+                                      self.validator.validate,
+                                      metadata_req)
+        self.assertIn("Provided object does not match schema "
+                      "'SecretMetadatum'",
+                      six.text_type(exception))
+
+    def test_should_raise_invalid_extra_sent_key(self):
+        self.value2 = 0
+        metadata_req = {
+            self.key1: self.value1,
+            self.key2: self.value2,
+            "extra_key": "extra_value"
+        }
+
+        exception = self.assertRaises(excep.InvalidObject,
+                                      self.validator.validate,
+                                      metadata_req)
+        self.assertIn("Provided object does not match schema "
+                      "'SecretMetadatum'",
+                      six.text_type(exception))
 
 if __name__ == '__main__':
     unittest.main()

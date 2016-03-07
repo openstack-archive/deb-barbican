@@ -11,7 +11,6 @@
 #  under the License.
 
 import pecan
-import six
 from six.moves.urllib import parse
 
 from barbican.api import controllers
@@ -21,11 +20,15 @@ from barbican.api.controllers import orders
 from barbican.api.controllers import quotas
 from barbican.api.controllers import secrets
 from barbican.api.controllers import transportkeys
+from barbican.common import config
 from barbican.common import utils
 from barbican import i18n as u
 from barbican import version
 
 LOG = utils.getLogger(__name__)
+
+
+CONF = config.CONF
 
 
 MIME_TYPE_JSON = 'application/json'
@@ -38,12 +41,10 @@ def _version_not_found():
     pecan.abort(404, u._("The version you requested wasn't found"))
 
 
-def _get_versioned_url(full_url, version):
-    parsed_url, _ = parse.urldefrag(full_url)
-
+def _get_versioned_url(version):
     if version[-1] != '/':
         version += '/'
-    return parse.urljoin(parsed_url, version)
+    return parse.urljoin(CONF.host_href, version)
 
 
 class BaseVersionController(object):
@@ -58,8 +59,7 @@ class BaseVersionController(object):
             'links': [
                 {
                     'rel': 'self',
-                    'href': _get_versioned_url(request.url,
-                                               cls.version_string),
+                    'href': _get_versioned_url(cls.version_string),
                 }, {
                     'rel': 'describedby',
                     'type': 'text/html',
@@ -133,7 +133,7 @@ class VersionsController(object):
             return {'build': version.__version__}
 
         versions_info = [version_class.get_version_info(pecan.request) for
-                         version_class in six.itervalues(AVAILABLE_VERSIONS)]
+                         version_class in AVAILABLE_VERSIONS.values()]
 
         version_output = {
             'versions': {
@@ -148,7 +148,7 @@ class VersionsController(object):
 
     def _redirect_to_default_json_home_if_needed(self, request):
         if self._mime_best_match(request.accept) == MIME_TYPE_JSON_HOME:
-            url = _get_versioned_url(request.url, DEFAULT_VERSION)
+            url = _get_versioned_url(DEFAULT_VERSION)
             LOG.debug("Redirecting Request to " + url)
             # NOTE(jaosorior): This issues an "external" redirect because of
             # two reasons:
