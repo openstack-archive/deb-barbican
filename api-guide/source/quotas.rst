@@ -2,8 +2,8 @@
 Quotas API - User Guide
 ************************
 
-Running with default settings, the Barbican REST API doesn't impose an upper
-limit on the number of resources that are allowed to be created. Barbican's
+Running with default settings, the barbican REST API doesn't impose an upper
+limit on the number of resources that are allowed to be created. barbican's
 backend depends on limited resources. These limited resources include database,
 plugin, and Hardware Security Module (HSM) storage space. This
 can be an issue in a multi-project or multi-user environment when one project
@@ -15,24 +15,25 @@ This user guide will show you how a user can lookup his current effective
 quotas and how a service admin can create, update, read, and delete project quota
 configuration for all projects in his cloud.
 
-This guide will assume you will be using a local running development environment of Barbican.
-If you need assistance with getting set up, please reference the :doc:`development guide </setup/dev>`.
+This guide will assume you will be using a local running development environment of barbican.
+If you need assistance with getting set up, please reference the
+`development guide <http://docs.openstack.org/developer/barbican/setup/dev.html>`__.
 
 .. _user_project_quotas_overview:
 
 Project Quotas Overview
 #######################
 
-All users authenticated with Barbican are able to read the effective quota values
+All users authenticated with barbican are able to read the effective quota values
 that apply to their project.  Barbican can derive the project that a user belongs
 to by reading the project scope from the authentication token.
 
 Service administrators can read, set, and delete quota configurations for each
-project known to Barbican.  The service administrator is recognized by his authenticated
-role.  The service administrator's role is defined in Barbican's policy.json file.
+project known to barbican.  The service administrator is recognized by his authenticated
+role.  The service administrator's role is defined in barbican's policy.json file.
 The default role for a service admin is "key-manager:service-admin".
 
-Quotas can be enforced for the following Barbican resources: secrets, containers,
+Quotas can be enforced for the following barbican resources: secrets, containers,
 orders, consumers, and CAs.  The configured quota value can be None (use the default),
 -1 (unlimited), 0 (disabled), or a positive integer defining the maximum number
 allowed for a project.
@@ -44,7 +45,7 @@ Default Quotas
 
 When no project quotas have been set for a project, the default
 project quotas are enforced for that project.  Default quotas are specified
-in the Barbican configuration file (barbican.conf).  The defaults provided
+in the barbican configuration file (barbican.conf).  The defaults provided
 in the standard configuration file are as follows.
 
 .. code-block:: none
@@ -101,7 +102,8 @@ with the request.
 
 
 To get more details on the quota lookup API, you can reference the
-:ref:`Get Quotas <get_quotas_request>` documentation.
+`Get Quotas <http://docs.openstack.org/developer/barbican/api/reference/quotas.html#get-quotas-request>`__
+documentation.
 
 
 .. _user_put_project_quotas:
@@ -131,8 +133,9 @@ To set or replace the quotas for the project with the ID 1234:
     HTTP/1.1 204 No Content
 
 
-To get more details on the project quota setting API you can reference
-the :ref:`Set Project Quotas <put_project_quotas>` documentation.
+To get more details on the project quota setting API you can reference the
+`Set Project Quotas <http://docs.openstack.org/developer/barbican/api/reference/quotas.html#put-project-quotas>`__
+documentation.
 
 
 .. _user_get_project_quotas:
@@ -202,8 +205,11 @@ The returned response contains a list with all project quota data.
 
 
 To get more details on project quota lookup APIs you can reference
-the :ref:`Get Project Quota <get_project_quotas_uuid>` and
-:ref:`Get Project Quota List <get_project_quotas>` documentation.
+the
+`Get Project Quota <http://docs.openstack.org/developer/barbican/api/reference/quotas.html#get-project-quotas-uuid>`__
+and
+`Get Project Quota List <http://docs.openstack.org/developer/barbican/api/reference/quotas.html#get-project-quotas>`__
+documentation.
 
 
 .. _user_delete_project_quotas:
@@ -230,4 +236,5 @@ There is no response content returned on successful deletion.
 
 
 To get more details on project quota delete APIs, you can reference the
-:ref:`Delete Project Quotas <delete_project_quotas>` documentation.
+`Delete Project Quotas <http://docs.openstack.org/developer/barbican/api/reference/quotas.html#delete-project-quotas>`__
+documentation.

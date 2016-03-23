@@ -424,11 +424,11 @@ class StoredKeyPrivateKeyNotFound(BarbicanException):
                   "key needed for stored key certificate generation.")
 
 
-class InvalidUUIDInURI(BarbicanHTTPException):
-    message = u._("The provided UUID in the URI (%(uuid_string)s) is "
-                  "malformed.")
-    client_message = u._("The provided UUID in the URI is malformed.")
-    status_code = 404
+class ProvidedTransportKeyNotFound(BarbicanHTTPException):
+    message = u._("Provided Transport key %(transport_key_id)s "
+                  "could not be found")
+    client_message = u._("Provided transport key was not found.")
+    status_code = 400
 
 
 class InvalidCAID(BarbicanHTTPException):

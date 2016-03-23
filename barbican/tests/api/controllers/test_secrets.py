@@ -157,6 +157,17 @@ class WhenTestingSecretsResource(utils.BarbicanAPIBaseTestCase):
             transport_key_needed=False
         )
 
+    def test_new_secret_fails_with_invalid_transport_key_ref(self):
+        resp, _ = create_secret(
+            self.app,
+            payload=b'superdupersecret',
+            content_type='text/plain',
+            transport_key_id="non_existing_transport_key_id",
+            transport_key_needed="true",
+            expect_errors=True
+        )
+        self.assertEqual(400, resp.status_int)
+
     def test_new_secret_w_unsupported_content_type_should_fail(self):
         resp, _ = create_secret(
             self.app,
@@ -355,7 +366,14 @@ class WhenGettingPuttingOrDeletingSecret(utils.BarbicanAPIBaseTestCase):
             headers={'Accept': 'application/json'},
             expect_errors=True
         )
+        self.assertEqual(404, get_resp.status_int)
 
+    def test_returns_404_on_get_with_bad_uuid(self):
+        get_resp = self.app.get(
+            '/secrets/98c876d9-aaac-44e4-8ea8-441932962b05X',
+            headers={'Accept': 'application/json'},
+            expect_errors=True
+        )
         self.assertEqual(404, get_resp.status_int)
 
     def test_returns_406_with_get_bad_accept_header(self):

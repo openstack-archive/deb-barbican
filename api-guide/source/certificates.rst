@@ -8,8 +8,9 @@ certificate renewal and certificate revocation.  At present, only the issuance o
 certificates is implemented.
 
 This guide will provide some examples on how to use each of the supported operations.
-It assumes that you will be using a local running development environment of Barbican.
-If you need assistance with getting set up, please reference the :doc:`development guide </setup/dev>`.
+It assumes that you will be using a local running development environment of barbican.
+If you need assistance with getting set up, please reference the
+`development guide <http://docs.openstack.org/developer/barbican/setup/dev.html>`__.
 
 Barbican can be used to request certificate issuance from a number of private and
 public Certificate Authorities (CAs).  This is done through the Orders interface.
@@ -63,7 +64,7 @@ as shown below:
 Getting the container provides references to secrets for the certificate,
 any intermediate certificate chain in PKCS7 format, and potentially references
 to the private and any passphrase used to encrypt the private key (if it is stored in
-Barbican).
+barbican).
 
 .. code-block:: bash
 
@@ -159,11 +160,12 @@ The output shows the status of the CA and the plugin used to communicate with it
         "expiration": "2015-05-10T05:55:37.740211"
     }
 
-A snake-oil CA plugin is included with the Barbican source code for basic testing.
+A snake-oil CA plugin is included with the barbican source code for basic testing.
 In addition, a robust, enterprise-ready CA plugin is provided for the Dogtag CA.
 Instructions for setting up the CA are provided at :doc:`Dogtag Setup Instructions <./dogtag_setup>`.
 
-More details can be found in the :doc:`certificate reference <../reference/certificates>`.
+More details can be found in the
+`certificate reference <http://docs.openstack.org/developer/barbican/api/reference/certificates.html>`__.
 
 .. _order_certificate:
 
@@ -231,10 +233,10 @@ This type has not yet been implemented.
 Stored Key Certificate Order
 ****************************
 
-Stored Key certificate orders take advantage of the fact that Barbican is also
+Stored Key certificate orders take advantage of the fact that barbican is also
 a repository for secrets.  RSA private keys can be either generated on the client
-and stored in Barbican beforehand using the secrets interface, or generated in
-Barbican directly using the orders interface.
+and stored in barbican beforehand using the secrets interface, or generated in
+barbican directly using the orders interface.
 
 All that is required for the certificate order is the reference to the secret container
 for the RSA key pair and any parameters needed to generate a CSR.  Barbican will

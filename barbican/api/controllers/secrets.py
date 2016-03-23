@@ -78,8 +78,15 @@ class SecretController(controllers.ACLMixin):
                 return secretmeta.SecretMetadataController(self.secret), \
                     remainder
             else:
-                return secretmeta.SecretMetadatumController(self.secret), \
-                    remainder
+                request_method = pecan.request.method
+                allowed_methods = ['GET', 'PUT', 'DELETE']
+
+                if request_method in allowed_methods:
+                    return secretmeta.SecretMetadatumController(self.secret), \
+                        remainder
+                else:
+                    # methods cannot be handled at controller level
+                    pecan.abort(405)
         else:
             # only 'acl' and 'metadata' as sub-resource is supported
             pecan.abort(405)
@@ -244,7 +251,6 @@ class SecretsController(controllers.ACLMixin):
         # actually does a lookup in the database regardless of the RBAC policy
         # check, the execution only gets here if authentication of the user was
         # previously successful.
-        controllers.assert_is_valid_uuid_from_uri(secret_id)
 
         secret = self.secret_repo.get_secret_by_id(
             entity_id=secret_id, suppress_exception=True)
