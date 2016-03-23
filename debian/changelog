@@ -1,6 +1,7 @@
 barbican (1:2.0.0~rc1-1) experimental; urgency=medium
 
   * New upstream release.
+  * Added python-openstackdocstheme (>= 1.0.3) as build-depends-indep.
 
  -- Thomas Goirand <zigo@debian.org>  Wed, 23 Mar 2016 15:07:10 +0100
 
