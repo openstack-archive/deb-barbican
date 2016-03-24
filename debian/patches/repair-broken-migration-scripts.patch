@@ -1,0 +1,148 @@
+Description: Repair broken migration scripts
+ The upstream Alembic migration scripts are quite broken. This patch attemps to
+ temporarily fix the issue, without attempting to really understand, waiting
+ for a fix from upstream.
+Author: Thomas Goirand <zigo@debian.org>
+Forwarded: no
+Last-Update: 2016-03-24
+
+--- barbican-2.0.0~rc1.orig/barbican/model/migration/alembic_migrations/versions/1c0f328bfce0_fixing_composite_primary_keys_and_.py
++++ barbican-2.0.0~rc1/barbican/model/migration/alembic_migrations/versions/1c0f328bfce0_fixing_composite_primary_keys_and_.py
+@@ -34,7 +34,10 @@ def upgrade():
+     op.create_index(op.f('ix_order_plugin_metadata_order_id'), 'order_plugin_metadata', ['order_id'], unique=False)
+     op.create_index(op.f('ix_order_retry_tasks_order_id'), 'order_retry_tasks', ['order_id'], unique=False)
+     op.create_index(op.f('ix_orders_container_id'), 'orders', ['container_id'], unique=False)
+-    op.create_index(op.f('ix_orders_project_id'), 'orders', ['project_id'], unique=False)
++    try:
++        op.create_index(op.f('ix_orders_project_id'), 'orders', ['project_id'], unique=False)
++    except:
++        pass
+     op.create_index(op.f('ix_orders_secret_id'), 'orders', ['secret_id'], unique=False)
+ 
+     ctx = op.get_context()
+--- barbican-2.0.0~rc1.orig/barbican/model/migration/alembic_migrations/versions/795737bb3c3_change_tenants_to_projects.py
++++ barbican-2.0.0~rc1/barbican/model/migration/alembic_migrations/versions/795737bb3c3_change_tenants_to_projects.py
+@@ -37,42 +37,77 @@ def upgrade():
+ 
+     # ---- Update tenant_secret table to project_secret:
+ 
+-    _drop_constraint(ctx, con, 'tenant_secret', 'tenant_secret_ibfk_1')
+-    _drop_constraint(ctx, con, 'tenant_secret', 'tenant_secret_ibfk_2')
+-
+-    op.drop_constraint('_tenant_secret_uc',
+-                       'tenant_secret',
+-                       type_='unique')
+-
+-    op.rename_table('tenant_secret', 'project_secret')
+-    op.alter_column('project_secret', 'tenant_id',
+-                    type_=sa.String(36),
+-                    new_column_name='project_id')
+-
+-    op.create_unique_constraint('_project_secret_uc', 'project_secret',
+-                                ['project_id', 'secret_id'])
++    try:
++        _drop_constraint(ctx, con, 'tenant_secret', 'tenant_secret_ibfk_1')
++        _drop_constraint(ctx, con, 'tenant_secret', 'tenant_secret_ibfk_2')
++    except:
++        pass
++
++    try:
++        op.drop_constraint('_tenant_secret_uc',
++                           'tenant_secret',
++                           type_='unique')
++    except:
++        pass
++
++    try:
++        op.rename_table('tenant_secret', 'project_secret')
++    except:
++        pass
++
++    try:
++        op.alter_column('project_secret', 'tenant_id',
++                        type_=sa.String(36),
++                        new_column_name='project_id')
++    except:
++        pass
++
++    try:
++        op.create_unique_constraint('_project_secret_uc', 'project_secret',
++                                    ['project_id', 'secret_id'])
++    except:
++        pass
+ 
+     # ---- Update tenants table to projects:
+ 
+-    op.rename_table('tenants', 'projects')
++    try:
++        op.rename_table('tenants', 'projects')
++    except:
++        pass
+ 
+     # re-create the foreign key constraints with explicit names.
+-    op.create_foreign_key('project_secret_project_fk', 'project_secret',
+-                          'projects', ['project_id'], ['id'])
+-    op.create_foreign_key('project_secret_secret_fk', 'project_secret',
+-                          'secrets', ['secret_id'], ['id'])
++    try:
++        op.create_foreign_key('project_secret_project_fk', 'project_secret',
++                              'projects', ['project_id'], ['id'])
++    except:
++        pass
++
++    try:
++        op.create_foreign_key('project_secret_secret_fk', 'project_secret',
++                              'secrets', ['secret_id'], ['id'])
++    except:
++        pass
+ 
+     # ---- Update containers table:
+ 
+-    _change_fk_to_project(
+-        ctx, con, 'containers', 'containers_ibfk_1', 'containers_project_fk')
++    try:
++        _change_fk_to_project(
++            ctx, con, 'containers', 'containers_ibfk_1', 'containers_project_fk')
++    except:
++        pass
+ 
+     # ---- Update kek_data table:
+ 
+-    _change_fk_to_project(
+-        ctx, con, 'kek_data', 'kek_data_ibfk_1', 'kek_data_project_fk')
++    try:
++        _change_fk_to_project(
++            ctx, con, 'kek_data', 'kek_data_ibfk_1', 'kek_data_project_fk')
++    except:
++        pass
+ 
+     # ---- Update orders table:
+ 
+-    _change_fk_to_project(
+-        ctx, con, 'orders', 'orders_ibfk_1', 'orders_project_fk')
++    try:
++        _change_fk_to_project(
++            ctx, con, 'orders', 'orders_ibfk_1', 'orders_project_fk')
++    except:
++        pass
+\ No newline at end of file
+--- barbican-2.0.0~rc1.orig/barbican/model/migration/alembic_migrations/versions/d2780d5aa510_change_url_length.py
++++ barbican-2.0.0~rc1/barbican/model/migration/alembic_migrations/versions/d2780d5aa510_change_url_length.py
+@@ -15,8 +15,11 @@ import sqlalchemy as sa
+ 
+ 
+ def upgrade():
+-    op.alter_column(
+-        'ContainerConsumerMetadatum',
+-        'URL',
+-        type_=sa.String(length=255)
+-    )
++    try:
++        op.alter_column(
++            'ContainerConsumerMetadatum',
++            'URL',
++            type_=sa.String(length=255)
++        )
++    except:
++        pass
+\ No newline at end of file
