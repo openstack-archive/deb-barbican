@@ -3,6 +3,8 @@ barbican (1:2.0.0~rc1-2) experimental; urgency=medium
   * Fixed config script.
   * Installing missing alembic migration files.
   * Add repair-broken-migration-scripts.patch.
+  * Fixed the barbican-api daemon not to use uwsgi anymore, and fixed the
+    default barbican-api-paste.ini.
 
  -- Thomas Goirand <zigo@debian.org>  Thu, 24 Mar 2016 12:08:54 +0100
 
