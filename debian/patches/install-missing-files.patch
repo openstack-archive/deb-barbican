@@ -1,0 +1,11 @@
+Description: Install missing files
+ PBR misses the files, this fixes it.
+Author: Thomas Goirand <zigo@debian.org>
+Forwarded: no
+Last-Update: 2016-03-24
+
+--- /dev/null	2016-03-15 18:18:48.046095192 +0100
++++ b/MANIFEST.in	2016-03-24 12:06:50.311632566 +0100
+@@ -0,0 +1,2 @@
++recursive-include barbican/model *
++recursive-include barbican/locale *

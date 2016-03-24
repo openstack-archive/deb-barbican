@@ -3,13 +3,13 @@
 set -e
 
 . /usr/share/debconf/confmodule
-CONF=/etc/barbican/barbican-api.conf
+CONF=/etc/barbican/barbican.conf
 API_CONF=/etc/barbican/barbican-api-paste.ini
 
 #PKGOS-INCLUDE#
 
 pkgos_var_user_group barbican
-pkgos_dbc_read_conf -pkg barbican-api ${CONF} DEFAULT sql_connection barbican $@
+pkgos_dbc_read_conf -pkg barbican-common ${CONF} DEFAULT sql_connection barbican $@
 pkgos_rabbit_read_conf ${CONF} DEFAULT barbican
 pkgos_read_admin_creds ${API_CONF} filter:keystone_authtoken barbican
 db_go

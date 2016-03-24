@@ -1,3 +1,10 @@
+barbican (1:2.0.0~rc1-2) experimental; urgency=medium
+
+  * Fixed config script.
+  * Installing missing alembic migration files.
+
+ -- Thomas Goirand <zigo@debian.org>  Thu, 24 Mar 2016 12:08:54 +0100
+
 barbican (1:2.0.0~rc1-1) experimental; urgency=medium
 
   * New upstream release.
