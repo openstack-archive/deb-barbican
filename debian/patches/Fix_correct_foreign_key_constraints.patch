@@ -1,0 +1,26 @@
+Subject: Fix correct foreign key constraints
+ In the orders table the wrong foreign key was being deleted and a
+ foreign key was also missing and needs to be explicitly created.
+ This patch make sure those items are fixed when using the alembic
+ migration process via the barbican-manage command instead of the
+ auto populate process.
+Author: Christopher Solis <cnsolis@us.ibm.com>
+Date: Mon, 14 Mar 2016 17:22:53 +0000 (+0000)
+X-Git-Url: https://review.openstack.org/gitweb?p=openstack%2Fbarbican.git;a=commitdiff_plain;h=f47ae83656966657a43487de22285428cfdb41ab
+Change-Id: Ie9a6722c3e9b661d8e0dabff836b5a988d720e98
+Bug-Ubuntu: 1556256
+Origin: upstream, https://review.openstack.org/#/c/292523/1
+
+diff --git a/barbican/model/migration/alembic_migrations/versions/795737bb3c3_change_tenants_to_projects.py b/barbican/model/migration/alembic_migrations/versions/795737bb3c3_change_tenants_to_projects.py
+index 2ecc4c6..8642505 100644
+--- a/barbican/model/migration/alembic_migrations/versions/795737bb3c3_change_tenants_to_projects.py
++++ b/barbican/model/migration/alembic_migrations/versions/795737bb3c3_change_tenants_to_projects.py
+@@ -75,4 +75,7 @@ def upgrade():
+     # ---- Update orders table:
+ 
+     _change_fk_to_project(
+-        ctx, con, 'orders', 'orders_ibfk_1', 'orders_project_fk')
++        ctx, con, 'orders', 'orders_ibfk_2', 'orders_project_fk')
++
++    op.create_foreign_key('orders_ibfk_2', 'orders', 'containers',
++                          ['container_id'], ['id'])
