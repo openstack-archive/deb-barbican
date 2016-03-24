@@ -3,3 +3,4 @@ fixes-keystone_authtoken-in-config-file.patch
 install-missing-files.patch
 Fix_correct_foreign_key_constraints.patch
 repair-broken-migration-scripts.patch
+fix-barbican-api.patch
