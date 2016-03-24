@@ -1,3 +1,3 @@
 etc/barbican/barbican.conf	/usr/share/barbican-common
 usr/bin/*
-bin/barbican-api
+bin/barbican-api		/usr/bin
