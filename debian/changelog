@@ -1,3 +1,9 @@
+barbican (1:2.0.0~rc1-3) experimental; urgency=medium
+
+  * Not using admin auth token anymore for registering API endpoint.
+
+ -- Thomas Goirand <zigo@debian.org>  Tue, 29 Mar 2016 12:10:31 +0000
+
 barbican (1:2.0.0~rc1-2) experimental; urgency=medium
 
   * Fixed config script.
