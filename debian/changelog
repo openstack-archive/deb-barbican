@@ -1,5 +1,8 @@
-barbican (1:2.0.0~rc1-4) unstable; urgency=medium
+barbican (1:2.0.0~rc2-1) unstable; urgency=medium
 
+  * New upstream release.
+  * Removed a chunk of debian/patches/repair-broken-migration-scripts.patch
+    applied upstream.
   * Uploading to unstable.
   * Added de.po debconf translation (Closes: #819690).
 

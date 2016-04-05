@@ -20,23 +20,3 @@ Last-Update: 2016-03-24
      op.create_index(op.f('ix_orders_secret_id'), 'orders', ['secret_id'], unique=False)
  
      ctx = op.get_context()
---- barbican-2.0.0~rc1.orig/barbican/model/migration/alembic_migrations/versions/d2780d5aa510_change_url_length.py
-+++ barbican-2.0.0~rc1/barbican/model/migration/alembic_migrations/versions/d2780d5aa510_change_url_length.py
-@@ -15,8 +15,11 @@ import sqlalchemy as sa
- 
- 
- def upgrade():
--    op.alter_column(
--        'ContainerConsumerMetadatum',
--        'URL',
--        type_=sa.String(length=255)
--    )
-+    try:
-+        op.alter_column(
-+            'ContainerConsumerMetadatum',
-+            'URL',
-+            type_=sa.String(length=255)
-+        )
-+    except:
-+        pass
-\ No newline at end of file
