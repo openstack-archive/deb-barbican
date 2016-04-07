@@ -1,3 +1,9 @@
+barbican (1:2.0.0-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Thomas Goirand <zigo@debian.org>  Thu, 07 Apr 2016 21:27:00 +0200
+
 barbican (1:2.0.0~rc2-1) unstable; urgency=medium
 
   * New upstream release.
