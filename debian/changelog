@@ -5,6 +5,7 @@ barbican (1:2.0.0-2) unstable; urgency=medium
 
   [ Thomas Goirand ]
   * Added python-pymysql as runtime depends:.
+  * Added Portuguese translation for debconf messages (Closes: #821241).
 
  -- Thomas Goirand <zigo@debian.org>  Thu, 21 Apr 2016 23:56:39 +0200
 
