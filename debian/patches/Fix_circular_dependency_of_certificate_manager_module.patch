@@ -1,24 +1,17 @@
-From 4c6704eda78bcac87b9bd17e6bd0e2f2c25d1429 Mon Sep 17 00:00:00 2001
-From: Juan Antonio Osorio Robles <jaosorior@redhat.com>
+Description: Fix circular dependency  of certificate_manager module
+ The certificate_manager module had a circular dependency that made it
+ problematic to use for certain versions of the python interpreter.
+ This was because we were initializing a singleton EVENT_PLUGIN_MANAGER
+ that in turn loaded the plugins; The problem was that the plugins
+ imported certificate_manger themselves and this caused the circular
+ dependency. So instead of creating that class in the module, I
+ created a function that should be called instead.
+Author: Juan Antonio Osorio Robles <jaosorior@redhat.com>
 Date: Thu, 14 Apr 2016 06:31:26 +0000
-Subject: [PATCH] Fix circular dependency  of certificate_manager module
-
-The certificate_manager module had a circular dependency that made it
-problematic to use for certain versions of the python interpreter.
-This was because we were initializing a singleton EVENT_PLUGIN_MANAGER
-that in turn loaded the plugins; The problem was that the plugins
-imported certificate_manger themselves and this caused the circular
-dependency. So instead of creating that class in the module, I
-created a function that should be called instead.
-
-Closes-Bug: #1570356
+Bug-Ubuntu: https://bugs.launchpad.net/barbican/+bug/1570356
 Change-Id: I9cdb7c3ecc9c275ee561363f6ce13248259f88d0
----
- barbican/plugin/interface/certificate_manager.py          | 15 ++++++++++++---
- barbican/tasks/certificate_resources.py                   |  2 +-
- .../tests/plugin/interface/test_certificate_manager.py    |  2 +-
- barbican/tests/tasks/test_certificate_resources.py        |  6 +++---
- 4 files changed, 17 insertions(+), 8 deletions(-)
+Origin: upstream, https://review.openstack.org/#/c/305624/
+Last-Update: 2016-04-29
 
 diff --git a/barbican/plugin/interface/certificate_manager.py b/barbican/plugin/interface/certificate_manager.py
 index 6e040d4..c54dd7b 100644
