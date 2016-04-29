@@ -40,6 +40,7 @@ override_dh_install:
 	for i in barbican-api-paste.ini barbican.conf barbican-functional.conf policy.json vassals/barbican-api.ini ; do \
 		install -D -m 0664 etc/barbican/$$i $(CURDIR)/debian/barbican-common/usr/share/barbican-common/$$i ; \
 	done
+	pkgos-fix-config-default $(CURDIR)/debian/barbican-common/usr/share/barbican-common/barbican.conf keystone_notifications enable True
 
 override_dh_sphinxdoc:
 ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))

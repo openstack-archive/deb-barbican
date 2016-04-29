@@ -1,3 +1,9 @@
+barbican (1:2.0.0-4) unstable; urgency=medium
+
+  * Set keystone_notifications enable True by default.
+
+ -- Thomas Goirand <zigo@debian.org>  Fri, 29 Apr 2016 18:39:00 +0000
+
 barbican (1:2.0.0-3) unstable; urgency=medium
 
   * Added Fix_circular_dependency_of_certificate_manager_module.patch from
