@@ -1,7 +1,8 @@
-barbican (1:2.0.0-3) UNRELEASED; urgency=medium
+barbican (1:2.0.0-3) unstable; urgency=medium
 
   * Added Fix_circular_dependency_of_certificate_manager_module.patch from
     upstream.
+  * Added fix-keystone-listener.patch.
 
  -- Thomas Goirand <zigo@debian.org>  Fri, 29 Apr 2016 17:20:01 +0000
 
