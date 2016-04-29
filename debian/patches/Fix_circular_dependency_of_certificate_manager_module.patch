@@ -1,0 +1,116 @@
+From 4c6704eda78bcac87b9bd17e6bd0e2f2c25d1429 Mon Sep 17 00:00:00 2001
+From: Juan Antonio Osorio Robles <jaosorior@redhat.com>
+Date: Thu, 14 Apr 2016 06:31:26 +0000
+Subject: [PATCH] Fix circular dependency  of certificate_manager module
+
+The certificate_manager module had a circular dependency that made it
+problematic to use for certain versions of the python interpreter.
+This was because we were initializing a singleton EVENT_PLUGIN_MANAGER
+that in turn loaded the plugins; The problem was that the plugins
+imported certificate_manger themselves and this caused the circular
+dependency. So instead of creating that class in the module, I
+created a function that should be called instead.
+
+Closes-Bug: #1570356
+Change-Id: I9cdb7c3ecc9c275ee561363f6ce13248259f88d0
+---
+ barbican/plugin/interface/certificate_manager.py          | 15 ++++++++++++---
+ barbican/tasks/certificate_resources.py                   |  2 +-
+ .../tests/plugin/interface/test_certificate_manager.py    |  2 +-
+ barbican/tests/tasks/test_certificate_resources.py        |  6 +++---
+ 4 files changed, 17 insertions(+), 8 deletions(-)
+
+diff --git a/barbican/plugin/interface/certificate_manager.py b/barbican/plugin/interface/certificate_manager.py
+index 6e040d4..c54dd7b 100644
+--- a/barbican/plugin/interface/certificate_manager.py
++++ b/barbican/plugin/interface/certificate_manager.py
+@@ -105,6 +105,10 @@
+ INFO_EXPIRATION = "expiration"
+ 
+ 
++# Singleton to avoid loading the CertificateEventManager plugins more than once
++_EVENT_PLUGIN_MANAGER = None
++
++
+ class CertificateRequestType(object):
+     """Constants to define the certificate request type."""
+     CUSTOM_REQUEST = "custom"
+@@ -702,8 +706,8 @@ class _CertificateEventPluginManager(named.NamedExtensionManager,
+ 
+     Each time this class is initialized it will load a new instance
+     of each enabled plugin. This is undesirable, so rather than initializing a
+-    new instance of this class use the EVENT_PLUGIN_MANAGER at the module
+-    level.
++    new instance of this class use the get_event_plugin_manager function
++    at the module level.
+     """
+     def __init__(self, conf=CONF, invoke_args=(), invoke_kwargs={}):
+         super(_CertificateEventPluginManager, self).__init__(
+@@ -750,4 +754,9 @@ def _invoke_certificate_plugins(self, method, *args, **kwargs):
+             getattr(plugin, method)(*args, **kwargs)
+ 
+ 
+-EVENT_PLUGIN_MANAGER = _CertificateEventPluginManager()
++def get_event_plugin_manager():
++    global _EVENT_PLUGIN_MANAGER
++    if _EVENT_PLUGIN_MANAGER:
++        return _EVENT_PLUGIN_MANAGER
++    _EVENT_PLUGIN_MANAGER = _CertificateEventPluginManager()
++    return _EVENT_PLUGIN_MANAGER
+diff --git a/barbican/tasks/certificate_resources.py b/barbican/tasks/certificate_resources.py
+index 77738f4..7fd57e3 100644
+--- a/barbican/tasks/certificate_resources.py
++++ b/barbican/tasks/certificate_resources.py
+@@ -516,7 +516,7 @@ def _get_container_from_order_meta(order_model, project_model):
+ 
+ def _notify_ca_unavailable(order_model, result):
+     """Notify observer(s) that the CA was unavailable at this time."""
+-    cert.EVENT_PLUGIN_MANAGER.notify_ca_is_unavailable(
++    cert.get_event_plugin_manager().notify_ca_is_unavailable(
+         order_model.project_id,
+         hrefs.convert_order_to_href(order_model.id),
+         result.status_message,
+diff --git a/barbican/tests/plugin/interface/test_certificate_manager.py b/barbican/tests/plugin/interface/test_certificate_manager.py
+index e047c63..dbf83fb 100644
+--- a/barbican/tests/plugin/interface/test_certificate_manager.py
++++ b/barbican/tests/plugin/interface/test_certificate_manager.py
+@@ -38,7 +38,7 @@ def setUp(self):
+         self.plugin_name = common_utils.generate_fullname_for(
+             self.plugin_returned)
+         self.plugin_loaded = mock.MagicMock(obj=self.plugin_returned)
+-        self.manager = cm.EVENT_PLUGIN_MANAGER
++        self.manager = cm.get_event_plugin_manager()
+         self.manager.extensions = [self.plugin_loaded]
+ 
+     def test_get_plugin_by_name(self):
+diff --git a/barbican/tests/tasks/test_certificate_resources.py b/barbican/tests/tasks/test_certificate_resources.py
+index ca6363b..9bddd50 100644
+--- a/barbican/tests/tasks/test_certificate_resources.py
++++ b/barbican/tests/tasks/test_certificate_resources.py
+@@ -395,7 +395,7 @@ def _config_cert_event_plugin(self):
+         """Mock the certificate event plugin manager."""
+         self.cert_event_plugin_patcher = mock.patch(
+             'barbican.plugin.interface.certificate_manager'
+-            '.EVENT_PLUGIN_MANAGER'
++            '._EVENT_PLUGIN_MANAGER'
+         )
+         self.cert_event_plugin_patcher.start()
+ 
+@@ -690,7 +690,7 @@ def test_should_return_ca_unavailable_for_request(self):
+ 
+         self._verify_issue_certificate_plugins_called()
+ 
+-        epm = self.cert_event_plugin_patcher.target.EVENT_PLUGIN_MANAGER
++        epm = self.cert_event_plugin_patcher.target._EVENT_PLUGIN_MANAGER
+         epm.notify_ca_is_unavailable.assert_called_once_with(
+             self.project.id,
+             order_ref,
+@@ -775,7 +775,7 @@ def test_should_return_ca_unavailable_for_request(self):
+ 
+         self._verify_check_certificate_plugins_called()
+ 
+-        epm = self.cert_event_plugin_patcher.target.EVENT_PLUGIN_MANAGER
++        epm = self.cert_event_plugin_patcher.target._EVENT_PLUGIN_MANAGER
+         epm.notify_ca_is_unavailable.assert_called_once_with(
+             self.project.id,
+             order_ref,

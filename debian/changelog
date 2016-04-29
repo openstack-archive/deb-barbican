@@ -1,3 +1,10 @@
+barbican (1:2.0.0-3) UNRELEASED; urgency=medium
+
+  * Added Fix_circular_dependency_of_certificate_manager_module.patch from
+    upstream.
+
+ -- Thomas Goirand <zigo@debian.org>  Fri, 29 Apr 2016 17:20:01 +0000
+
 barbican (1:2.0.0-2) unstable; urgency=medium
 
   [ Ondřej Nový ]
