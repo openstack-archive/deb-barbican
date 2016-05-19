@@ -1,6 +1,10 @@
 barbican (1:2.0.0-5) UNRELEASED; urgency=medium
 
+  [ Thomas Goirand ]
   * Updated Dutch debconf templates (Closes: #822884).
+
+  [ Ondřej Nový ]
+  * d/copyright: Changed source URL to https protocol
 
  -- Thomas Goirand <zigo@debian.org>  Thu, 19 May 2016 11:18:50 +0200
 

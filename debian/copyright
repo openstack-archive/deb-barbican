@@ -1,6 +1,6 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: barbican
-Source: git://github.com/openstack/barbican.git
+Source: https://github.com/openstack/barbican
 
 Files: *
 Copyright: (c) 2010, US Government as represented by the Administrator of NASA
