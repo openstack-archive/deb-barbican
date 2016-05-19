@@ -1,3 +1,9 @@
+barbican (1:2.0.0-5) UNRELEASED; urgency=medium
+
+  * Updated Dutch debconf templates (Closes: #822884).
+
+ -- Thomas Goirand <zigo@debian.org>  Thu, 19 May 2016 11:18:50 +0200
+
 barbican (1:2.0.0-4) unstable; urgency=medium
 
   * Set keystone_notifications enable True by default.
