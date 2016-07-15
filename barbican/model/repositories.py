@@ -91,7 +91,6 @@ def setup_database_engine_and_factory():
     global sa_logger, _SESSION_FACTORY, _ENGINE
 
     LOG.info('Setting up database engine and session factory')
-    LOG.debug('Sql connection = %s', CONF.sql_connection)
     if CONF.debug:
         sa_logger = logging.getLogger('sqlalchemy.engine')
         sa_logger.setLevel(logging.DEBUG)
@@ -215,7 +214,8 @@ def is_db_connection_error(args):
 
 
 def _create_engine(connection, **engine_args):
-    LOG.debug("Sql connection: %s; Args: %s", connection, engine_args)
+    LOG.debug('Sql connection: please check "sql_connection" property in '
+              'barbican configuration file; Args: %s', engine_args)
 
     engine = sqlalchemy.create_engine(connection, **engine_args)
 
@@ -685,8 +685,14 @@ class SecretRepo(BaseRepo):
         :param project_id: id of barbican project entity
         :param session: existing db session reference.
         """
+
+        utcnow = timeutils.utcnow()
+        expiration_filter = or_(models.Secret.expiration.is_(None),
+                                models.Secret.expiration > utcnow)
+
         query = session.query(models.Secret).filter_by(deleted=False)
         query = query.filter(models.Secret.project_id == project_id)
+        query = query.filter(expiration_filter)
 
         return query
 
@@ -741,7 +747,7 @@ class SecretStoreMetadatumRepo(BaseRepo):
     """
 
     def save(self, metadata, secret_model):
-        """Saves the the specified metadata for the secret.
+        """Saves the specified metadata for the secret.
 
         :raises NotFound if entity does not exist.
         """
@@ -788,7 +794,7 @@ class SecretUserMetadatumRepo(BaseRepo):
     """
 
     def create_replace_user_metadata(self, secret_id, metadata):
-        """Creates or replaces the the specified metadata for the secret."""
+        """Creates or replaces the specified metadata for the secret."""
         now = timeutils.utcnow()
 
         session = get_session()
@@ -1005,7 +1011,7 @@ class OrderPluginMetadatumRepo(BaseRepo):
     """
 
     def save(self, metadata, order_model):
-        """Saves the the specified metadata for the order.
+        """Saves the specified metadata for the order.
 
         :raises NotFound if entity does not exist.
         """
@@ -1058,7 +1064,7 @@ class OrderBarbicanMetadatumRepo(BaseRepo):
     """
 
     def save(self, metadata, order_model):
-        """Saves the the specified metadata for the order.
+        """Saves the specified metadata for the order.
 
         :raises NotFound if entity does not exist.
         """
@@ -1593,7 +1599,7 @@ class CertificateAuthorityMetadatumRepo(BaseRepo):
     """
 
     def save(self, metadata, ca_model):
-        """Saves the the specified metadata for the CA.
+        """Saves the specified metadata for the CA.
 
         :raises NotFound if entity does not exist.
         """

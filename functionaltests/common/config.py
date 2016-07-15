@@ -72,7 +72,9 @@ def setup_config(config_file=''):
         cfg.StrOpt('endpoint_type', default='public'),
         cfg.IntOpt('timeout', default=10),
         cfg.StrOpt('override_url', default=''),
-        cfg.StrOpt('override_url_version', default='')
+        cfg.StrOpt('override_url_version', default=''),
+        cfg.BoolOpt('verify_ssl', default=True),
+        cfg.BoolOpt('server_host_href_set', default=True)
     ]
     TEST_CONF.register_group(keymanager_group)
     TEST_CONF.register_opts(keymanager_options, group=keymanager_group)

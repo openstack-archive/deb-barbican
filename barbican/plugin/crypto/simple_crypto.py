@@ -20,19 +20,21 @@ from oslo_config import cfg
 import six
 
 from barbican.common import config
+from barbican.common import utils
 from barbican import i18n as u
 from barbican.plugin.crypto import crypto as c
 
 
 CONF = config.new_config()
+LOG = utils.getLogger(__name__)
 
 simple_crypto_plugin_group = cfg.OptGroup(name='simple_crypto_plugin',
                                           title="Simple Crypto Plugin Options")
 simple_crypto_plugin_opts = [
     cfg.StrOpt('kek',
-               default=b'dGhpcnR5X3R3b19ieXRlX2tleWJsYWhibGFoYmxhaGg=',
+               default='dGhpcnR5X3R3b19ieXRlX2tleWJsYWhibGFoYmxhaGg=',
                help=u._('Key encryption key to be used by Simple Crypto '
-                        'Plugin'))
+                        'Plugin'), secret=True)
 ]
 CONF.register_group(simple_crypto_plugin_group)
 CONF.register_opts(simple_crypto_plugin_opts, group=simple_crypto_plugin_group)
@@ -44,6 +46,10 @@ class SimpleCryptoPlugin(c.CryptoPluginBase):
 
     def __init__(self, conf=CONF):
         self.master_kek = conf.simple_crypto_plugin.kek
+        LOG.warning(u._LW("This plugin is NOT meant for a production "
+                          "environment. This is meant just for development "
+                          "and testing purposes. Please use another plugin "
+                          "for production."))
 
     def _get_kek(self, kek_meta_dto):
         if not kek_meta_dto.plugin_meta:

@@ -24,6 +24,7 @@ import abc
 import datetime
 
 from oslo_config import cfg
+from oslo_utils import encodeutils
 import six
 from stevedore import named
 
@@ -103,6 +104,10 @@ INFO_DESCRIPTION = "description"
 INFO_CA_SIGNING_CERT = "ca_signing_certificate"
 INFO_INTERMEDIATES = "intermediates"
 INFO_EXPIRATION = "expiration"
+
+
+# Singleton to avoid loading the CertificateEventManager plugins more than once
+_EVENT_PLUGIN_MANAGER = None
 
 
 class CertificateRequestType(object):
@@ -459,7 +464,7 @@ class CertificatePluginBase(object):
         """Deletes a subordinate CA
 
         Like the create_ca call, this should only be made if the plugin
-        returns Ture for supports_create_ca()
+        returns True for supports_create_ca()
 
         :param ca_id: id for the CA as specified by the plugin
         :return: None
@@ -646,7 +651,8 @@ class CertificatePluginManager(named.NamedExtensionManager):
             new_ca_infos = cert_plugin.get_ca_info()
         except Exception as e:
             # The plugin gave an invalid CA, log and return
-            LOG.error(u._LE("ERROR getting CA from plugin: %s"), e.message)
+            LOG.error(u._LE("ERROR getting CA from plugin: %s"),
+                      encodeutils.exception_to_unicode(e))
             return
 
         old_cas, offset, limit, total = self.ca_repo.get_by_create_date(
@@ -678,7 +684,8 @@ class CertificatePluginManager(named.NamedExtensionManager):
                 self._add_ca(plugin_name, add_id, new_ca_infos[add_id])
             except Exception as e:
                 # The plugin gave an invalid CA, log and continue
-                LOG.error(u._LE("ERROR adding CA from plugin: %s"), e.message)
+                LOG.error(u._LE("ERROR adding CA from plugin: %s"),
+                          encodeutils.exception_to_unicode(e))
 
     def _add_ca(self, plugin_name, plugin_ca_id, ca_info):
         parsed_ca = dict(ca_info)
@@ -702,8 +709,8 @@ class _CertificateEventPluginManager(named.NamedExtensionManager,
 
     Each time this class is initialized it will load a new instance
     of each enabled plugin. This is undesirable, so rather than initializing a
-    new instance of this class use the EVENT_PLUGIN_MANAGER at the module
-    level.
+    new instance of this class use the get_event_plugin_manager function
+    at the module level.
     """
     def __init__(self, conf=CONF, invoke_args=(), invoke_kwargs={}):
         super(_CertificateEventPluginManager, self).__init__(
@@ -750,4 +757,9 @@ class _CertificateEventPluginManager(named.NamedExtensionManager,
             getattr(plugin, method)(*args, **kwargs)
 
 
-EVENT_PLUGIN_MANAGER = _CertificateEventPluginManager()
+def get_event_plugin_manager():
+    global _EVENT_PLUGIN_MANAGER
+    if _EVENT_PLUGIN_MANAGER:
+        return _EVENT_PLUGIN_MANAGER
+    _EVENT_PLUGIN_MANAGER = _CertificateEventPluginManager()
+    return _EVENT_PLUGIN_MANAGER

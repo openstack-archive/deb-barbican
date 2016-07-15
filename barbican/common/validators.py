@@ -775,6 +775,27 @@ class ContainerConsumerValidator(ValidatorBase):
         return json_data
 
 
+class ContainerSecretValidator(ValidatorBase):
+    """Validate a Container Secret."""
+
+    def __init__(self):
+        self.name = 'ContainerSecret'
+        self.schema = {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "maxLength": 255},
+                "secret_ref": {"type": "string", "minLength": 1}
+            },
+            "required": ["secret_ref"]
+        }
+
+    def validate(self, json_data, parent_schema=None):
+        schema_name = self._full_name(parent_schema)
+
+        self._assert_schema_is_valid(json_data, schema_name)
+        return json_data
+
+
 class ContainerValidator(ValidatorBase):
     """Validator for all types of Container."""
 
@@ -840,9 +861,9 @@ class ContainerValidator(ValidatorBase):
 
         # Ensure that our secret refs are valid relative to our config, no
         # spoofing allowed!
-        configured_host_href = CONF.host_href
+        req_host_href = utils.get_base_url_from_request()
         for secret_ref in secret_refs:
-            if configured_host_href not in secret_ref.get('secret_ref'):
+            if not secret_ref.get('secret_ref').startswith(req_host_href):
                 raise exception.UnsupportedField(
                     field='secret_ref',
                     schema=schema_name,
@@ -860,8 +881,8 @@ class ContainerValidator(ValidatorBase):
         return json_data
 
     def _validate_rsa(self, secret_refs_names, schema_name):
-        required_names = set(['public_key', 'private_key'])
-        optional_names = set(['private_key_passphrase'])
+        required_names = {'public_key', 'private_key'}
+        optional_names = {'private_key_passphrase'}
         contains_unsupported_names = self._contains_unsupported_names(
             secret_refs_names, required_names | optional_names)
         self._assert_validity(
@@ -880,9 +901,9 @@ class ContainerValidator(ValidatorBase):
             "secret_refs")
 
     def _validate_certificate(self, secret_refs_names, schema_name):
-        required_names = set(['certificate'])
-        optional_names = set(['private_key', 'private_key_passphrase',
-                              'intermediates'])
+        required_names = {'certificate'}
+        optional_names = {'private_key', 'private_key_passphrase',
+                          'intermediates'}
         contains_unsupported_names = self._contains_unsupported_names(
             secret_refs_names, required_names.union(optional_names))
         self._assert_validity(

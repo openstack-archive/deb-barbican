@@ -11,6 +11,7 @@
 #  under the License.
 import collections
 
+from oslo_policy import policy
 import pecan
 from webob import exc
 
@@ -103,6 +104,13 @@ def handle_exceptions(operation_name=u._('System')):
             except exc.HTTPError:
                 LOG.exception(u._LE('Webob error seen'))
                 raise  # Already converted to Webob exception, just reraise
+            # In case PolicyNotAuthorized, we do not want to expose payload by
+            # logging exception, so just LOG.error
+            except policy.PolicyNotAuthorized as pna:
+                status, message = api.generate_safe_exception_message(
+                    operation_name, pna)
+                LOG.error(message)
+                pecan.abort(status, message)
             except Exception as e:
                 # In case intervening modules have disabled logging.
                 LOG.logger.disabled = False
@@ -124,11 +132,14 @@ def _do_enforce_content_types(pecan_req, valid_content_types):
     types passed in by our caller.
     """
     if pecan_req.content_type not in valid_content_types:
+        content_type = pecan_req.content_type
+        if isinstance(content_type, bytes):
+            content_type = content_type.decode('utf-8')
         m = u._(
             "Unexpected content type: {type}. Expected content types "
             "are: {expected}"
         ).format(
-            type=pecan_req.content_type.decode('utf-8'),
+            type=content_type,
             expected=valid_content_types
         )
         pecan.abort(415, m)

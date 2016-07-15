@@ -157,6 +157,31 @@ class OrdersTestCase(base.TestCase):
         self.assertEqual(secret_resp.status_code, 200)
         self.assertEqual(secret_resp.model.name, test_model.meta['name'])
 
+    @testcase.attr('negative')
+    def test_order_create_check_secret_payload(self):
+        """Create order and check the secret payload.
+
+        Check the secret payload with wrong payload_content_type.
+        Should return a 406.
+        """
+        test_model = order_models.OrderModel(**self.create_default_data)
+
+        resp, order_ref = self.behaviors.create_order(test_model)
+        self.assertEqual(resp.status_code, 202)
+
+        order_resp = self.behaviors.get_order(order_ref)
+        self.assertEqual(order_resp.status_code, 200)
+
+        # PENDING orders may take a moment to be processed by the workers
+        # when running tests with queue enabled
+        self.wait_for_order(order_resp, order_ref)
+
+        secret_ref = order_resp.model.secret_ref
+
+        secret_resp = self.secret_behaviors.get_secret(
+            secret_ref, payload_content_type="text/plain")
+        self.assertEqual(secret_resp.status_code, 406)
+
     @testcase.attr('positive')
     def test_order_and_secret_metadata_same(self):
         """Checks that metadata from secret GET and order GET are the same.
@@ -485,8 +510,10 @@ class OrdersTestCase(base.TestCase):
         create_resp, order_ref = self.behaviors.create_order(test_model)
         self.assertEqual(create_resp.status_code, 400)
 
+    @testcase.skipIf(not base.conf_host_href_used, 'response href using '
+                     'wsgi request instead of CONF.host_href')
     @testcase.attr('positive')
-    def test_order_create_change_host_header(self, **kwargs):
+    def test_order_create_change_host_with_header_not_allowed(self, **kwargs):
         """Create an order with a (possibly) malicious host name in header."""
 
         test_model = order_models.OrderModel(**self.create_default_data)
@@ -503,6 +530,29 @@ class OrdersTestCase(base.TestCase):
         # malicious one.
         regex = '.*{0}.*'.format(malicious_hostname)
         self.assertNotRegexpMatches(resp.headers['location'], regex)
+
+    @testcase.skipIf(base.conf_host_href_used, 'response href using '
+                     'CONF.host_href instead of wsgi request')
+    @testcase.attr('positive')
+    def test_order_get_change_host_with_header_allowed(self, **kwargs):
+        """Get an order with a alternative proxy host name in header."""
+
+        test_model = order_models.OrderModel(**self.create_default_data)
+
+        another_proxy_hostname = 'proxy2.server.com'
+        changed_host_header = {'Host': another_proxy_hostname}
+
+        # In test, cannot pass different host header during create as returned
+        # order_ref in response contains that host in url. That url is
+        # used in deleting that order during cleanup step.
+        resp, order_ref = self.behaviors.create_order(test_model)
+        self.assertEqual(resp.status_code, 202)
+
+        order_resp = self.behaviors.get_order(
+            order_ref, extra_headers=changed_host_header)
+        # Assert that returned href has provided proxy hostname
+        regex = '.*{0}.*'.format(another_proxy_hostname)
+        self.assertRegexpMatches(order_resp.model.order_ref, regex)
 
     @testcase.attr('positive')
     def test_encryption_using_generated_key(self):

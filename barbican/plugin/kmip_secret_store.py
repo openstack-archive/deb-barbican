@@ -19,6 +19,7 @@ An implementation of the SecretStore that uses the KMIP backend.
 
 import base64
 import os
+import ssl
 import stat
 
 from cryptography.hazmat.backends import default_backend
@@ -33,6 +34,7 @@ from oslo_config import cfg
 from oslo_log import log
 
 from barbican.common import config
+from barbican.common import exception
 from barbican import i18n as u  # noqa
 from barbican.plugin.interface import secret_store as ss
 from barbican.plugin.util import translations
@@ -88,11 +90,11 @@ def convert_pem_to_der(pem_pkcs1):
     # cryptography adds an extra '\n' to end of PEM file
     # added if statement so if future version removes extra \n tests will not
     # break
-    if pem_pkcs1.endswith('\n'):
+    if pem_pkcs1.endswith(b'\n'):
         pem_pkcs1 = pem_pkcs1[:-1]
     # neither PyCrypto or cryptography support export in DER format with PKCS1
     # encoding so doing by hand
-    der_pkcs1_b64 = ''.join(pem_pkcs1.split('\n')[1:-1])
+    der_pkcs1_b64 = b''.join(pem_pkcs1.split(b'\n')[1:-1])
     der_pkcs1 = base64.b64decode(der_pkcs1_b64)
     return der_pkcs1
 
@@ -121,9 +123,20 @@ def get_private_key_der_pkcs1(pem):
     return convert_pem_to_der(pem_pkcs1)
 
 
-class KMIPSecretStoreError(Exception):
-    def __init__(self, what):
-        super(KMIPSecretStoreError, self).__init__(what)
+class KMIPSecretStoreError(exception.BarbicanException):
+    def __init__(self, message):
+        super(KMIPSecretStoreError, self).__init__(message)
+
+
+class KMIPSecretStoreActionNotSupported(exception.BarbicanHTTPException):
+    """Raised if no plugins are found that support the requested operation."""
+
+    client_message = u._("KMIP plugin action not support.")
+    status_code = 400
+
+    def __init__(self, message):
+        self.message = message
+        super(KMIPSecretStoreActionNotSupported, self).__init__()
 
 
 class KMIPSecretStore(ss.SecretStoreBase):
@@ -220,6 +233,15 @@ class KMIPSecretStore(ss.SecretStoreBase):
                     credential_value))
 
         config = conf.kmip_plugin
+
+        # Use TLSv1_2, if present
+        tlsv12 = getattr(ssl, "PROTOCOL_TLSv1_2", None)
+        if tlsv12:
+            config.ssl_version = 'PROTOCOL_TLSv1_2'
+            LOG.info(u._LI('Going to use TLS1.2...'))
+        else:
+            LOG.warning(u._LW('TLSv1_2 is not present on the System'))
+
         self.client = client.ProxyKmipClient(
             hostname=config.host,
             port=config.port,
@@ -274,6 +296,7 @@ class KMIPSecretStore(ss.SecretStoreBase):
         :param key_spec: KeySpec with asymmetric algorithm and bit_length
         :returns: AsymmetricKeyMetadataDTO with the key UUIDs
         :raises: SecretGeneralException, SecretAlgorithmNotSupportedException
+                 KMIPSecretStoreActionNotSupported
         """
         LOG.debug("Starting asymmetric key generation with KMIP plugin")
         if not self.generate_supports(key_spec):
@@ -281,13 +304,10 @@ class KMIPSecretStore(ss.SecretStoreBase):
                 key_spec.alg)
 
         if key_spec.alg.lower() not in ss.KeyAlgorithm.ASYMMETRIC_ALGORITHMS:
-            raise KMIPSecretStoreError(
-                u._("An unsupported algorithm {algorithm} was passed to "
-                    "the 'generate_asymmetric_key' method").format(
-                        algorithm=key_spec.alg))
+            raise ss.SecretAlgorithmNotSupportedException(key_spec.alg)
 
         if key_spec.passphrase:
-            raise KMIPSecretStoreError(
+            raise KMIPSecretStoreActionNotSupported(
                 u._('KMIP plugin does not currently support protecting the '
                     'private key with a passphrase'))
 
@@ -502,8 +522,7 @@ class KMIPSecretStore(ss.SecretStoreBase):
     def _map_type_ss_to_kmip(self, object_type):
         """Map SecretType to KMIP type enum
 
-        Returns None if the type is not supported. The KMIP plugin only
-        supports symmetric and asymmetric keys for now.
+        Returns None if the type is not supported.
         :param object_type: SecretType enum value
         :returns: KMIP type enums if supported, None if not supported
         """

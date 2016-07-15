@@ -14,6 +14,7 @@
 # limitations under the License.
 import base64
 import socket
+import ssl
 import stat
 
 import mock
@@ -182,6 +183,13 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
         CONF.kmip_plugin.pkcs1_only = True
         secret_store = kss.KMIPSecretStore(CONF)
         self.assertTrue(secret_store.pkcs1_only)
+
+    def test_enable_tlsv12_config_option(self):
+        ssl.PROTOCOL_TLSv1_2 = 5
+        CONF = kss.CONF
+        secret_store = kss.KMIPSecretStore(CONF)
+        self.assertTrue(secret_store)
+        self.assertEqual(CONF.kmip_plugin.ssl_version, 'PROTOCOL_TLSv1_2')
 
     # --------------- TEST GENERATE_SUPPORTS ---------------------------------
 
@@ -357,7 +365,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
         key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.AES,
                                         128, 'mode')
         self.assertRaises(
-            kss.KMIPSecretStoreError,
+            secret_store.SecretAlgorithmNotSupportedException,
             self.secret_store.generate_asymmetric_key,
             key_spec)
 
@@ -365,7 +373,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
         key_spec = secret_store.KeySpec(secret_store.KeyAlgorithm.RSA,
                                         2048, 'mode', 'passphrase')
         self.assertRaises(
-            kss.KMIPSecretStoreError,
+            kss.KMIPSecretStoreActionNotSupported,
             self.secret_store.generate_asymmetric_key,
             key_spec)
 
@@ -425,7 +433,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
 
     def test_store_passphrase_secret_assert_called(self):
         key_spec = secret_store.KeySpec(None, None, None)
-        passphrase = "supersecretpassphrase"
+        passphrase = b"supersecretpassphrase"
         secret_dto = secret_store.SecretDTO(secret_store.SecretType.PASSPHRASE,
                                             base64.b64encode(passphrase),
                                             key_spec,
@@ -451,7 +459,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
 
     def test_store_passphrase_secret_return_value(self):
         key_spec = secret_store.KeySpec(None, None, None)
-        passphrase = "supersecretpassphrase"
+        passphrase = b"supersecretpassphrase"
         secret_dto = secret_store.SecretDTO(secret_store.SecretType.PASSPHRASE,
                                             base64.b64encode(passphrase),
                                             key_spec,
@@ -460,11 +468,11 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
         return_value = self.secret_store.store_secret(secret_dto)
         expected = {kss.KMIPSecretStore.KEY_UUID: 'uuid'}
 
-        self.assertEqual(0, cmp(expected, return_value))
+        self.assertEqual(expected, return_value)
 
     def test_store_opaque_secret_assert_called(self):
         key_spec = secret_store.KeySpec(None, None, None)
-        opaque = ('\x00\x01\x02\x03\x04\x05\x06\x07')
+        opaque = b'\x00\x01\x02\x03\x04\x05\x06\x07'
         secret_dto = secret_store.SecretDTO(secret_store.SecretType.OPAQUE,
                                             base64.b64encode(opaque),
                                             key_spec,
@@ -487,7 +495,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
 
     def test_store_opaque_secret_return_value(self):
         key_spec = secret_store.KeySpec(None, None, None)
-        opaque = ('\x00\x01\x02\x03\x04\x05\x06\x07')
+        opaque = b'\x00\x01\x02\x03\x04\x05\x06\x07'
         secret_dto = secret_store.SecretDTO(secret_store.SecretType.OPAQUE,
                                             base64.b64encode(opaque),
                                             key_spec,
@@ -496,7 +504,7 @@ class WhenTestingKMIPSecretStore(utils.BaseTestCase):
         return_value = self.secret_store.store_secret(secret_dto)
         expected = {kss.KMIPSecretStore.KEY_UUID: 'uuid'}
 
-        self.assertEqual(0, cmp(expected, return_value))
+        self.assertEqual(expected, return_value)
 
     @utils.parameterized_dataset({
         'private_pkcs8': [secret_store.SecretType.PRIVATE,

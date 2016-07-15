@@ -12,8 +12,10 @@
 # implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from contextlib import contextmanager
 import datetime
 import functools
+import os
 from os import path
 import time
 import types
@@ -30,6 +32,19 @@ from OpenSSL import crypto
 from barbican.api import app
 import barbican.context
 from barbican.tests import database_utils
+
+
+def mock_pecan_request(test_instance, host=None):
+    patcher_obj = mock.patch('pecan.request')
+    mock_req = patcher_obj.start()
+    test_instance.addCleanup(patcher_obj.stop)
+    mock_req.url = host
+
+
+@contextmanager
+def pecan_context(test_instance, host=None):
+    mock_pecan_request(test_instance, host=host)
+    yield
 
 
 class BarbicanAPIBaseTestCase(oslotest.BaseTestCase):
@@ -309,7 +324,8 @@ def construct_new_test_function(original_func, name, build_params):
         six.get_function_code(original_func),
         six.get_function_globals(original_func),
         name=name,
-        argdefs=six.get_function_defaults(original_func)
+        argdefs=six.get_function_defaults(original_func),
+        closure=six.get_function_closure(original_func)
     )
 
     for key, val in original_func.__dict__.items():
@@ -450,12 +466,12 @@ def generate_test_uuid(tail_value=0):
 
 
 def get_symmetric_key():
-    s = "MIICdgIBADANBgkqhkiG9w=="
+    s = b"MIICdgIBADANBgkqhkiG9w=="
     return s
 
 
 def get_triple_des_key():
-    s = "AQIDBAUGBwgBAgMEBQYHCAECAwQFBgcI"
+    s = b"AQIDBAUGBwgBAgMEBQYHCAECAwQFBgcI"
     return s
 
 
@@ -476,6 +492,10 @@ def is_private_key_valid(expected, observed):
 def is_public_key_valid(expected, observed):
     # TODO(alee) fill in the relevant test here
     return True
+
+
+def is_kmip_enabled():
+    return os.environ.get('KMIP_PLUGIN_ENABLED') is not None
 
 
 class DummyClassForTesting(object):

@@ -93,8 +93,8 @@ class ModelBase(object):
     """Base class for Nova and Barbican Models."""
     __table_args__ = {'mysql_engine': 'InnoDB'}
     __table_initialized__ = False
-    __protected_attributes__ = set([
-        "created_at", "updated_at", "deleted_at", "deleted"])
+    __protected_attributes__ = {
+        "created_at", "updated_at", "deleted_at", "deleted"}
 
     id = sa.Column(sa.String(36), primary_key=True,
                    default=utils.generate_uuid)
@@ -229,9 +229,15 @@ class ContainerSecret(BASE, SoftDeleteMixIn, ModelBase):
 
     # Eager load this relationship via 'lazy=False'.
     container = orm.relationship(
-        'Container', backref=orm.backref('container_secrets', lazy=False))
+        'Container',
+        backref=orm.backref('container_secrets', lazy=False,
+                            primaryjoin="and_(ContainerSecret.container_id == "
+                            "Container.id, ContainerSecret.deleted!=1)"))
     secrets = orm.relationship(
-        'Secret', backref=orm.backref('container_secrets'))
+        'Secret',
+        backref=orm.backref('container_secrets',
+                            primaryjoin="and_(ContainerSecret.secret_id == "
+                            "Secret.id, ContainerSecret.deleted!=1)"))
 
     __table_args__ = (sa.UniqueConstraint('container_id', 'secret_id', 'name',
                                           name='_container_secret_name_uc'),)
@@ -836,7 +842,7 @@ class TransportKey(BASE, SoftDeleteMixIn, ModelBase):
     transport_key = sa.Column(sa.Text, nullable=False)
 
     def __init__(self, plugin_name, transport_key):
-        """Creates transport key entity ."""
+        """Creates transport key entity."""
         super(TransportKey, self).__init__()
 
         msg = u._("Must supply non-None {0} argument for TransportKey entry.")
@@ -883,7 +889,7 @@ class CertificateAuthority(BASE, ModelBase):
     )
 
     def __init__(self, parsed_ca_in):
-        """Creates certificate authority entity ."""
+        """Creates certificate authority entity."""
         super(CertificateAuthority, self).__init__()
 
         msg = u._("Must supply Non-None {0} argument "

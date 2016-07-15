@@ -18,7 +18,7 @@ import os
 
 import requests
 from six.moves import urllib
-from tempest_lib.common.utils import misc as misc_utils
+from tempest.lib.common.utils import misc as misc_utils
 
 from functionaltests.common import auth
 from functionaltests.common import config
@@ -32,6 +32,7 @@ class BarbicanClient(object):
 
     def __init__(self, api_version='v1'):
         self.timeout = CONF.keymanager.timeout
+        self.verify_ssl = CONF.keymanager.verify_ssl
         self.api_version = api_version
         self.default_headers = {
             'Content-Type': 'application/json',
@@ -101,6 +102,12 @@ class BarbicanClient(object):
             password=CONF.rbac_users.auditor_b_password,
             project_name=CONF.rbac_users.project_b)
 
+    def get_all_functional_test_user_names(self):
+        retval = []
+        for username in self._auth:
+            retval.append(username)
+        return retval
+
     def _attempt_to_stringify_content(self, content, content_tag):
         if content is None:
             return content
@@ -147,7 +154,7 @@ class BarbicanClient(object):
                  str_request)
 
     def _status_is_2xx_success(self, status_code):
-        return status_code >= 200 and status_code < 300
+        return 200 <= status_code < 300
 
     def attempt_to_deserialize(self, response, model_type):
         if (self._status_is_2xx_success(response.status_code) and
@@ -268,6 +275,7 @@ class BarbicanClient(object):
             'headers': headers,
             'data': data,
             'timeout': self.timeout,
+            'verify': self.verify_ssl,
             'params': params
         }
         if use_auth:
