@@ -1,8 +1,5 @@
 fix-barbican-api.conf-as-parsable.patch
-fixes-keystone_authtoken-in-config-file.patch
 install-missing-files.patch
-Fix_correct_foreign_key_constraints.patch
 repair-broken-migration-scripts.patch
 fix-barbican-api.patch
-Fix_circular_dependency_of_certificate_manager_module.patch
-fix-keystone-listener.patch
+fixes-keystone_authtoken-in-config-file.patch
