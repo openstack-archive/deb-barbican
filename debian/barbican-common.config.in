@@ -11,7 +11,7 @@ API_CONF=/etc/barbican/barbican-api-paste.ini
 pkgos_var_user_group barbican
 pkgos_dbc_read_conf -pkg barbican-common ${CONF} DEFAULT sql_connection barbican $@
 pkgos_rabbit_read_conf ${CONF} DEFAULT barbican
-pkgos_read_admin_creds ${API_CONF} filter:keystone_authtoken barbican
+pkgos_read_admin_creds ${API_CONF} filter:authtoken barbican
 db_go
 
 exit 0
