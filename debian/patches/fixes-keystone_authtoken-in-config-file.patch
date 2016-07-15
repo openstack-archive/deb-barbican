@@ -1,26 +1,21 @@
 Description: Fixes keystone_authtoken in config file.
 Author: Thomas Goirand <zigo@debian.org>
 Forwarded: no
-Last-Update: 2015-06-24
+Last-Update: 2016-07-15
 
-Index: barbican/etc/barbican/barbican-api-paste.ini
-===================================================================
---- barbican.orig/etc/barbican/barbican-api-paste.ini
-+++ barbican/etc/barbican/barbican-api-paste.ini
-@@ -46,11 +46,14 @@ audit_map_file = /etc/barbican/api_audit
- [filter:keystone_authtoken]
+--- barbican-3.0.0~b2.orig/etc/barbican/barbican-api-paste.ini
++++ barbican-3.0.0~b2/etc/barbican/barbican-api-paste.ini
+@@ -46,6 +46,13 @@ audit_map_file = /etc/barbican/api_audit
+ 
+ [filter:authtoken]
  paste.filter_factory = keystonemiddleware.auth_token:filter_factory
- #need ability to re-auth a token, thus admin url
--identity_uri = http://localhost:35357
 +auth_host = 127.0.0.1
 +auth_port = 5000
 +auth_protocol = http
-+#identity_uri = http://localhost:35357
- admin_tenant_name = service
- admin_user = barbican
- admin_password = orange
--auth_version = v3.0
++admin_tenant_name = service
++admin_user = barbican
++admin_password = orange
 +auth_version = v2.0
- #delay failing perhaps to log the unauthorized request in barbican ..
- #delay_auth_decision = true
- # signing_dir is configurable, but the default behavior of the authtoken
+ 
+ [filter:profile]
+ use = egg:repoze.profile

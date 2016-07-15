@@ -29,7 +29,7 @@ Last-Update: 2016-03-24
  # Use this pipeline for Barbican API - DEFAULT no authentication
  [pipeline:barbican_api]
 -pipeline = cors unauthenticated-context apiapp
-+pipeline = cors keystone_authtoken context apiapp
++pipeline = cors authtoken context apiapp
 +#pipeline = cors unauthenticated-context apiapp
  
  #Use this pipeline to activate a repoze.profile middleware and HTTP port,
