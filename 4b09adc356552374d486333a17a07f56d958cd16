@@ -1,0 +1,8 @@
+Code-Review+2: Douglas Mendizábal <douglas.mendizabal@rackspace.com>
+Workflow+1: Steve Heyman <steve.heyman@rackspace.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 05 Aug 2016 03:23:20 +0000
+Reviewed-on: https://review.openstack.org/347434
+Project: openstack/deb-barbican
+Branch: refs/heads/master

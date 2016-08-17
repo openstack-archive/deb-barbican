@@ -1,0 +1,9 @@
+Code-Review+2: Douglas Mendizábal <douglas.mendizabal@rackspace.com>
+Code-Review+2: John Wood <john.wood@rackspace.com>
+Workflow+1: John Wood <john.wood@rackspace.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 20 Jul 2016 00:48:46 +0000
+Reviewed-on: https://review.openstack.org/336167
+Project: openstack/deb-barbican
+Branch: refs/heads/master

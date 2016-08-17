@@ -1,0 +1,9 @@
+Code-Review+2: John Wood <john.wood@rackspace.com>
+Code-Review+2: Ade Lee <alee@redhat.com>
+Workflow+1: Ade Lee <alee@redhat.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 26 Jul 2016 04:03:28 +0000
+Reviewed-on: https://review.openstack.org/311830
+Project: openstack/deb-barbican
+Branch: refs/heads/master

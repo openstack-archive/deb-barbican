@@ -1,0 +1,10 @@
+Code-Review+2: Juan Antonio Osorio Robles <jaosorior@redhat.com>
+Code-Review+1: Rahul U Nair <rahulunair@gmail.com>
+Code-Review+2: Dave McCowan <dmccowan@cisco.com>
+Workflow+1: Dave McCowan <dmccowan@cisco.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 04 Aug 2016 14:04:33 +0000
+Reviewed-on: https://review.openstack.org/340437
+Project: openstack/deb-barbican
+Branch: refs/heads/master
