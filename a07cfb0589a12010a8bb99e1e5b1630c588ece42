@@ -1,0 +1,9 @@
+Code-Review+2: Doug Hellmann <doug@doughellmann.com>
+Workflow+1: Doug Hellmann <doug@doughellmann.com>
+Code-Review+1: Dave McCowan <dmccowan@cisco.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 16 Oct 2015 20:56:51 +0000
+Reviewed-on: https://review.openstack.org/235157
+Project: openstack/deb-barbican
+Branch: refs/heads/stable/liberty
