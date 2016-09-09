@@ -1,0 +1,10 @@
+Code-Review+1: Jiong Liu <liujiong@gohighsec.com>
+Code-Review+2: Douglas Mendizábal <douglas.mendizabal@rackspace.com>
+Code-Review+2: Juan Antonio Osorio Robles <jaosorior@redhat.com>
+Workflow+1: Juan Antonio Osorio Robles <jaosorior@redhat.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 12 Aug 2016 10:14:26 +0000
+Reviewed-on: https://review.openstack.org/343532
+Project: openstack/deb-barbican
+Branch: refs/heads/master

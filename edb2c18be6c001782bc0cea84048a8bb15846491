@@ -1,0 +1,9 @@
+Code-Review+2: John Wood <john.wood@rackspace.com>
+Code-Review+2: Fernando Diaz <diazjf@us.ibm.com>
+Workflow+1: Fernando Diaz <diazjf@us.ibm.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 19 Aug 2016 20:30:41 +0000
+Reviewed-on: https://review.openstack.org/356221
+Project: openstack/deb-barbican
+Branch: refs/heads/master
