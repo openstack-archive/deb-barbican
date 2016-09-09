@@ -1,0 +1,8 @@
+Code-Review+2: Douglas Mendizábal <douglas.mendizabal@rackspace.com>
+Workflow+1: Douglas Mendizábal <douglas.mendizabal@rackspace.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 18 Apr 2016 15:19:41 +0000
+Reviewed-on: https://review.openstack.org/306263
+Project: openstack/deb-barbican
+Branch: refs/heads/stable/mitaka
