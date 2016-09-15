@@ -10,6 +10,7 @@
 #  License for the specific language governing permissions and limitations
 #  under the License.
 
+from oslo_utils import timeutils
 import pecan
 from six.moves.urllib import parse
 
@@ -47,6 +48,10 @@ def _secret_payload_not_found():
 def _secret_already_has_data():
     """Throw exception that the secret already has data."""
     pecan.abort(409, u._("Secret already has data, cannot modify it."))
+
+
+def _bad_query_string_parameters():
+    pecan.abort(400, u._("URI provided invalid query string parameters."))
 
 
 def _request_has_twsk_but_no_transport_key_id():
@@ -253,6 +258,60 @@ class SecretsController(controllers.ACLMixin):
         self.secret_repo = repo.get_secret_repository()
         self.quota_enforcer = quota.QuotaEnforcer('secrets', self.secret_repo)
 
+    def _is_valid_date_filter(self, date_filter):
+        filters = date_filter.split(',')
+        sorted_filters = dict()
+        try:
+            for filter in filters:
+                if filter.startswith('gt:'):
+                    if sorted_filters.get('gt') or sorted_filters.get('gte'):
+                        return False
+                    sorted_filters['gt'] = timeutils.parse_isotime(filter[3:])
+                elif filter.startswith('gte:'):
+                    if sorted_filters.get('gt') or sorted_filters.get(
+                            'gte') or sorted_filters.get('eq'):
+                        return False
+                    sorted_filters['gte'] = timeutils.parse_isotime(filter[4:])
+                elif filter.startswith('lt:'):
+                    if sorted_filters.get('lt') or sorted_filters.get('lte'):
+                        return False
+                    sorted_filters['lt'] = timeutils.parse_isotime(filter[3:])
+                elif filter.startswith('lte:'):
+                    if sorted_filters.get('lt') or sorted_filters.get(
+                            'lte') or sorted_filters.get('eq'):
+                        return False
+                    sorted_filters['lte'] = timeutils.parse_isotime(filter[4:])
+                elif sorted_filters.get('eq') or sorted_filters.get(
+                        'gte') or sorted_filters.get('lte'):
+                    return False
+                else:
+                    sorted_filters['eq'] = timeutils.parse_isotime(filter)
+        except ValueError:
+            return False
+        return True
+
+    def _is_valid_sorting(self, sorting):
+        allowed_keys = ['algorithm', 'bit_length', 'created',
+                        'expiration', 'mode', 'name', 'secret_type', 'status',
+                        'updated']
+        allowed_directions = ['asc', 'desc']
+        sorted_keys = dict()
+        for sort in sorting.split(','):
+            if ':' in sort:
+                try:
+                    key, direction = sort.split(':')
+                except ValueError:
+                    return False
+            else:
+                key, direction = sort, 'asc'
+            if key not in allowed_keys or direction not in allowed_directions:
+                return False
+            if sorted_keys.get(key):
+                return False
+            else:
+                sorted_keys[key] = direction
+        return True
+
     @pecan.expose()
     def _lookup(self, secret_id, *remainder):
         # NOTE(jaosorior): It's worth noting that even though this section
@@ -278,8 +337,8 @@ class SecretsController(controllers.ACLMixin):
         def secret_fields(field):
             return putil.mime_types.augment_fields_with_content_types(field)
 
-        LOG.debug('Start secrets on_get '
-                  'for project-ID %s:', external_project_id)
+        LOG.debug(u._('Start secrets on_get '
+                      'for project-ID %s:'), external_project_id)
 
         name = kw.get('name', '')
         if name:
@@ -293,22 +352,33 @@ class SecretsController(controllers.ACLMixin):
             # the default should be used.
             bits = 0
 
+        for date_filter in 'created', 'updated', 'expiration':
+            if kw.get(date_filter) and not self._is_valid_date_filter(
+                    kw.get(date_filter)):
+                _bad_query_string_parameters()
+        if kw.get('sort') and not self._is_valid_sorting(kw.get('sort')):
+            _bad_query_string_parameters()
+
         ctxt = controllers._get_barbican_context(pecan.request)
         user_id = None
         if ctxt:
             user_id = ctxt.user
 
-        result = self.secret_repo.get_by_create_date(
+        result = self.secret_repo.get_secret_list(
             external_project_id,
             offset_arg=kw.get('offset', 0),
-            limit_arg=kw.get('limit', None),
+            limit_arg=kw.get('limit'),
             name=name,
             alg=kw.get('alg'),
             mode=kw.get('mode'),
             bits=bits,
             suppress_exception=True,
-            acl_only=kw.get('acl_only', None),
-            user_id=user_id
+            acl_only=kw.get('acl_only'),
+            user_id=user_id,
+            created=kw.get('created'),
+            updated=kw.get('updated'),
+            expiration=kw.get('expiration'),
+            sort=kw.get('sort')
         )
 
         secrets, offset, limit, total = result
@@ -336,7 +406,8 @@ class SecretsController(controllers.ACLMixin):
     @controllers.enforce_rbac('secrets:post')
     @controllers.enforce_content_types(['application/json'])
     def on_post(self, external_project_id, **kwargs):
-        LOG.debug('Start on_post for project-ID %s:...', external_project_id)
+        LOG.debug(u._('Start on_post for project-ID %s:...'),
+                  external_project_id)
 
         data = api.load_body(pecan.request, validator=self.validator)
         project = res.get_or_create_project(external_project_id)
@@ -362,7 +433,7 @@ class SecretsController(controllers.ACLMixin):
             transport_key_id=data.get('transport_key_id'))
 
         url = hrefs.convert_secret_to_href(new_secret.id)
-        LOG.debug('URI to secret is %s', url)
+        LOG.debug(u._('URI to secret is %s'), url)
 
         pecan.response.status = 201
         pecan.response.headers['Location'] = url
