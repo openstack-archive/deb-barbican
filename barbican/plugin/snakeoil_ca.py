@@ -39,11 +39,11 @@ snakeoil_ca_plugin_group = cfg.OptGroup(name='snakeoil_ca_plugin',
 
 snakeoil_ca_plugin_opts = [
     cfg.StrOpt('ca_cert_path',
-               help=u._('Path to CA certicate file')),
+               help=u._('Path to CA certificate file')),
     cfg.StrOpt('ca_cert_key_path',
                help=u._('Path to CA certificate key file')),
     cfg.StrOpt('ca_cert_chain_path',
-               help=u._('Path to CA certicate chain file')),
+               help=u._('Path to CA certificate chain file')),
     cfg.StrOpt('ca_cert_pkcs7_path',
                help=u._('Path to CA chain pkcs7 file')),
     cfg.StrOpt('subca_cert_key_directory',
@@ -212,12 +212,12 @@ class SnakeoilCA(object):
 
     def ensure_exists(self):
         if not self.exists:
-            LOG.debug('Keypair not found, creating new cert/key')
+            LOG.debug(u._('Keypair not found, creating new cert/key'))
             self.cert, self.key, self.chain, self.pkcs7 = (
                 self.create_keypair())
 
     def create_keypair(self):
-        LOG.debug('Generating Snakeoil CA')
+        LOG.debug(u._('Generating Snakeoil CA'))
         key = crypto.PKey()
         key.generate_key(crypto.TYPE_RSA, self.key_size)
 
@@ -241,7 +241,7 @@ class SnakeoilCA(object):
 
         cert.sign(self.signing_key, 'sha256')
 
-        LOG.debug('Snakeoil CA cert/key generated')
+        LOG.debug(u._('Snakeoil CA cert/key generated'))
 
         chain = b''
         if self.parent_chain_path:
