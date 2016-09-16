@@ -1,0 +1,9 @@
+Code-Review+2: Douglas Mendizábal <douglas.mendizabal@rackspace.com>
+Code-Review+2: Kaitlin Farr <kaitlin.farr@jhuapl.edu>
+Workflow+1: Kaitlin Farr <kaitlin.farr@jhuapl.edu>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 16 Sep 2016 18:21:07 +0000
+Reviewed-on: https://review.openstack.org/371696
+Project: openstack/deb-barbican
+Branch: refs/heads/master
