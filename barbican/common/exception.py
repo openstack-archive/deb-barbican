@@ -279,7 +279,7 @@ class LimitExceeded(BarbicanHTTPException):
 
 
 class ServiceUnavailable(BarbicanException):
-    message = u._("The request returned 503 Service Unavilable. This "
+    message = u._("The request returned 503 Service Unavailable. This "
                   "generally occurs on service overload or other transient "
                   "outage.")
 
@@ -530,3 +530,60 @@ class P11CryptoKeyHandleException(PKCS11Exception):
 
 class P11CryptoTokenException(PKCS11Exception):
     message = u._("No token was found in slot %(slot_id)s")
+
+
+class MultipleStorePreferredPluginMissing(BarbicanException):
+    """Raised when a preferred plugin is missing in service configuration."""
+    def __init__(self, store_name):
+        super(MultipleStorePreferredPluginMissing, self).__init__(
+            u._("Preferred Secret Store plugin '{store_name}' is not "
+                "currently set in service configuration. This is probably a "
+                "server misconfiguration.").format(
+                store_name=store_name)
+        )
+        self.store_name = store_name
+
+
+class MultipleStorePluginStillInUse(BarbicanException):
+    """Raised when a used plugin is missing in service configuration."""
+    def __init__(self, store_name):
+        super(MultipleStorePluginStillInUse, self).__init__(
+            u._("Secret Store plugin '{store_name}' is still in use and can "
+                "not be removed. Its missing in service configuration. This is"
+                " probably a server misconfiguration.").format(
+                store_name=store_name)
+        )
+        self.store_name = store_name
+
+
+class MultipleSecretStoreLookupFailed(BarbicanException):
+    """Raised when a plugin lookup suffix is missing during config read."""
+    def __init__(self):
+        msg = u._("Plugin lookup property 'stores_lookup_suffix' is not "
+                  "defined in service configuration")
+        super(MultipleSecretStoreLookupFailed, self).__init__(msg)
+
+
+class MultipleStoreIncorrectGlobalDefault(BarbicanException):
+    """Raised when a global default for only one plugin is not set to True."""
+    def __init__(self, occurence):
+        msg = None
+        if occurence > 1:
+            msg = u._("There are {count} plugins with global default as "
+                      "True in service configuration. Only one plugin can have"
+                      " this as True").format(count=occurence)
+        else:
+            msg = u._("There is no plugin defined with global default as True."
+                      " One of plugin must be identified as global default")
+
+        super(MultipleStoreIncorrectGlobalDefault, self).__init__(msg)
+
+
+class MultipleStorePluginValueMissing(BarbicanException):
+    """Raised when a store plugin value is missing in service configuration."""
+    def __init__(self, section_name):
+        super(MultipleStorePluginValueMissing, self).__init__(
+            u._("In section '{0}', secret_store_plugin value is missing"
+                ).format(section_name)
+        )
+        self.section_name = section_name

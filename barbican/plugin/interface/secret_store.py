@@ -23,6 +23,7 @@ from barbican.common import config
 from barbican.common import exception
 from barbican.common import utils
 from barbican import i18n as u
+from barbican.plugin.util import multiple_backends
 from barbican.plugin.util import utils as plugin_utils
 
 
@@ -42,11 +43,23 @@ store_opts = [
     cfg.MultiStrOpt('enabled_secretstore_plugins',
                     default=DEFAULT_PLUGINS,
                     help=u._('List of secret store plugins to load.')
-                    )
+                    ),
+    cfg.BoolOpt('enable_multiple_secret_stores',
+                default=False,
+                help=u._('Flag to enable multiple secret store plugin'
+                         ' backend support. Default is False')
+                ),
+    cfg.ListOpt('stores_lookup_suffix',
+                default=None,
+                help=u._('List of suffix to use for looking up plugins which '
+                         'are supported with multiple backend support.')
+                )
 ]
 CONF.register_group(store_opt_group)
 CONF.register_opts(store_opts, group=store_opt_group)
 config.parse_args(CONF)
+
+config.set_module_config("secretstore", CONF)
 
 
 class SecretStorePluginNotFound(exception.BarbicanHTTPException):
@@ -238,7 +251,7 @@ class SecretType(object):
     opaque data. Opaque data can be any kind of data. This data type signals to
     Barbican to just store the information and do not worry about the format or
     encoding. This is the default type if no type is specified by the user."""
-    OPAQUE = "opaque"
+    OPAQUE = utils.SECRET_TYPE_OPAQUE
 
 
 class KeyAlgorithm(object):
@@ -344,6 +357,18 @@ class AsymmetricKeyMetadataDTO(object):
 
 @six.add_metaclass(abc.ABCMeta)
 class SecretStoreBase(object):
+
+    @abc.abstractmethod
+    def get_plugin_name(self):
+        """Gets user friendly plugin name.
+
+        This plugin name is expected to be read from config file.
+        There will be a default defined for plugin name which can be customized
+        in specific deployment if needed.
+
+        This name needs to be unique across a deployment.
+        """
+        raise NotImplementedError  # pragma: no cover
 
     @abc.abstractmethod
     def generate_symmetric_key(self, key_spec):
@@ -496,20 +521,25 @@ def _enforce_extensions_configured(plugin_related_function):
 
 class SecretStorePluginManager(named.NamedExtensionManager):
     def __init__(self, conf=CONF, invoke_args=(), invoke_kwargs={}):
+        ss_conf = config.get_module_config('secretstore')
+        plugin_names = self._get_internal_plugin_names(ss_conf)
+
         super(SecretStorePluginManager, self).__init__(
-            conf.secretstore.namespace,
-            conf.secretstore.enabled_secretstore_plugins,
+            ss_conf.secretstore.namespace,
+            plugin_names,
             invoke_on_load=False,  # Defer creating plugins to utility below.
             invoke_args=invoke_args,
-            invoke_kwds=invoke_kwargs
+            invoke_kwds=invoke_kwargs,
+            name_order=True  # extensions sorted as per order of plugin names
         )
 
-        plugin_utils.instantiate_plugins(
-            self, invoke_args, invoke_kwargs)
+        plugin_utils.instantiate_plugins(self, invoke_args, invoke_kwargs)
+
+        multiple_backends.sync_secret_stores(self)
 
     @_enforce_extensions_configured
     def get_plugin_store(self, key_spec, plugin_name=None,
-                         transport_key_needed=False):
+                         transport_key_needed=False, project_id=None):
         """Gets a secret store plugin.
 
         :param: plugin_name: set to plugin_name to get specific plugin
@@ -518,7 +548,8 @@ class SecretStorePluginManager(named.NamedExtensionManager):
         key is required.
         :returns: SecretStoreBase plugin implementation
         """
-        active_plugins = plugin_utils.get_active_plugins(self)
+        active_plugins = multiple_backends.get_applicable_store_plugins(
+            self, project_id=project_id, existing_plugin_name=plugin_name)
 
         if plugin_name is not None:
             for plugin in active_plugins:
@@ -561,7 +592,7 @@ class SecretStorePluginManager(named.NamedExtensionManager):
         raise StorePluginNotAvailableOrMisconfigured(plugin_name)
 
     @_enforce_extensions_configured
-    def get_plugin_generate(self, key_spec):
+    def get_plugin_generate(self, key_spec, project_id=None):
         """Gets a secret generate plugin.
 
         :param key_spec: KeySpec that contains details on the type of key to
@@ -569,10 +600,32 @@ class SecretStorePluginManager(named.NamedExtensionManager):
         :returns: SecretStoreBase plugin implementation
         """
 
-        for plugin in plugin_utils.get_active_plugins(self):
+        active_plugins = multiple_backends.get_applicable_store_plugins(
+            self, project_id=project_id, existing_plugin_name=None)
+
+        for plugin in active_plugins:
             if plugin.generate_supports(key_spec):
                 return plugin
         raise SecretStoreSupportedPluginNotFound()
+
+    def _get_internal_plugin_names(self, secretstore_conf):
+        """Gets plugin names used for loading via stevedore.
+
+        When multiple secret store support is enabled, then secret store plugin
+        names are read via updated configuration structure. If not enabled,
+        then it reads MultiStr property in 'secretstore' config section.
+        """
+        # to cache default global secret store value on first use
+        self.global_default_store_dict = None
+        if utils.is_multiple_backends_enabled():
+            self.parsed_stores = multiple_backends.\
+                read_multiple_backends_config()
+            plugin_names = [store.store_plugin for store in self.parsed_stores
+                            if store.store_plugin]
+        else:
+            plugin_names = secretstore_conf.secretstore.\
+                enabled_secretstore_plugins
+        return plugin_names
 
 
 def get_manager():

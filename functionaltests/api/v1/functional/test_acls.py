@@ -130,8 +130,8 @@ test_data_read_container_consumer_acl_only = {
     'with_creator_a': {'user': creator_a, 'expected_return': 200},
     'with_observer_a': {'user': observer_a, 'expected_return': 200},
     'with_auditor_a': {'user': auditor_a, 'expected_return': 200},
-    'with_admin_b': {'user': admin_b, 'expected_return': 404},
-    'with_observer_b': {'user': observer_b, 'expected_return': 404},
+    'with_admin_b': {'user': admin_b, 'expected_return': 200},
+    'with_observer_b': {'user': observer_b, 'expected_return': 200},
 }
 
 test_data_delete_container_consumer_acl_only = {
@@ -139,7 +139,7 @@ test_data_delete_container_consumer_acl_only = {
     'with_creator_a': {'user': creator_a, 'expected_return': 403},
     'with_observer_a': {'user': observer_a, 'expected_return': 403},
     'with_auditor_a': {'user': auditor_a, 'expected_return': 403},
-    'with_admin_b': {'user': admin_b, 'expected_return': 404},
+    'with_admin_b': {'user': admin_b, 'expected_return': 403},
     'with_observer_b': {'user': observer_b, 'expected_return': 403},
 }
 
@@ -148,7 +148,7 @@ test_data_create_container_consumer_acl_only = {
     'with_creator_a': {'user': creator_a, 'expected_return': 403},
     'with_observer_a': {'user': observer_a, 'expected_return': 403},
     'with_auditor_a': {'user': auditor_a, 'expected_return': 403},
-    'with_admin_b': {'user': admin_b, 'expected_return': 404},
+    'with_admin_b': {'user': admin_b, 'expected_return': 200},
     'with_observer_b': {'user': observer_b, 'expected_return': 403},
 }
 
@@ -169,6 +169,7 @@ class AclTestCase(base.TestCase):
         self.acl_behaviors.delete_all_created_acls()
         self.secret_behaviors.delete_all_created_secrets()
         self.container_behaviors.delete_all_created_containers()
+        self.consumer_behaviors.delete_all_created_consumers()
         super(AclTestCase, self).tearDown()
 
     @utils.parameterized_dataset(test_data_read_secret_rbac_only)
