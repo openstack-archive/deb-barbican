@@ -59,8 +59,8 @@ Build-Depends-Indep: alembic (>= 0.8.4),
                      tempest (>= 1:12.1.0),
                      testrepository,
 Standards-Version: 3.9.8
-Vcs-Browser: https://git.openstack.org/cgit/openstack/deb-barbican
-Vcs-Git: https://git.openstack.org/openstack/deb-barbican
+Vcs-Browser: https://git.openstack.org/cgit/openstack/deb-barbican?h=debian%2Fnewton
+Vcs-Git: https://git.openstack.org/openstack/deb-barbican -b debian/newton
 Homepage: https://github.com/openstack/barbican
 
 Package: python-barbican
