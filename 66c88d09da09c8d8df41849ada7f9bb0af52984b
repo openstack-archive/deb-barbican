@@ -1,0 +1,9 @@
+Code-Review+2: Douglas Mendizábal <douglas.mendizabal@rackspace.com>
+Code-Review+2: Dave McCowan <dmccowan@cisco.com>
+Workflow+1: Dave McCowan <dmccowan@cisco.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 27 Sep 2016 19:17:08 +0000
+Reviewed-on: https://review.openstack.org/373740
+Project: openstack/deb-barbican
+Branch: refs/heads/master
