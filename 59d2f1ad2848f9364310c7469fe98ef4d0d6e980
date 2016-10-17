@@ -1,0 +1,10 @@
+Code-Review+2: Kaitlin Farr <kaitlin.farr@jhuapl.edu>
+Code-Review+1: Peter Hamilton <peter.hamilton@jhuapl.edu>
+Code-Review+2: Dave McCowan <dmccowan@cisco.com>
+Workflow+1: Dave McCowan <dmccowan@cisco.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 14 Oct 2016 20:28:38 +0000
+Reviewed-on: https://review.openstack.org/373005
+Project: openstack/deb-barbican
+Branch: refs/heads/master
