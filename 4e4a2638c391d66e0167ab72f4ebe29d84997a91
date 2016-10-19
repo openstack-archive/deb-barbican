@@ -1,0 +1,13 @@
+Code-Review+1: Peter Hamilton <peter.hamilton@jhuapl.edu>
+Code-Review+1: Mohit Motiani <mohit.motiani@intel.com>
+Code-Review+1: zhangyanxian <zhang.yanxian@zte.com.cn>
+Code-Review+1: gengchc2 <geng.changcai2@zte.com.cn>
+Code-Review+2: Dave McCowan <dmccowan@cisco.com>
+Code-Review+2: Fernando Diaz <diazjf@us.ibm.com>
+Workflow+1: Fernando Diaz <diazjf@us.ibm.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 19 Oct 2016 05:49:46 +0000
+Reviewed-on: https://review.openstack.org/348151
+Project: openstack/deb-barbican
+Branch: refs/heads/master
