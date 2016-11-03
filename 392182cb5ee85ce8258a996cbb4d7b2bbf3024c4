@@ -1,0 +1,9 @@
+Code-Review+2: Dave McCowan <dmccowan@cisco.com>
+Code-Review+2: Fernando Diaz <diazjf@us.ibm.com>
+Workflow+1: Fernando Diaz <diazjf@us.ibm.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 03 Nov 2016 16:06:55 +0000
+Reviewed-on: https://review.openstack.org/392692
+Project: openstack/deb-barbican
+Branch: refs/heads/master
