@@ -1,0 +1,10 @@
+Code-Review+2: Kaitlin Farr <kaitlin.farr@jhuapl.edu>
+Code-Review+1: Marc Koderer <marc@koderer.com>
+Code-Review+2: Ade Lee <alee@redhat.com>
+Workflow+1: Ade Lee <alee@redhat.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 30 Nov 2016 02:59:38 +0000
+Reviewed-on: https://review.openstack.org/396910
+Project: openstack/deb-barbican
+Branch: refs/heads/master
