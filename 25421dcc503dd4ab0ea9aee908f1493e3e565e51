@@ -1,0 +1,10 @@
+Code-Review+1: Jeremy Liu <liujiong@gohighsec.com>
+Code-Review+2: Kaitlin Farr <kaitlin.farr@jhuapl.edu>
+Workflow+1: Fernando Diaz <diazjf@us.ibm.com>
+Code-Review+2: Fernando Diaz <diazjf@us.ibm.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 06 Dec 2016 17:36:41 +0000
+Reviewed-on: https://review.openstack.org/405803
+Project: openstack/deb-barbican
+Branch: refs/heads/master
