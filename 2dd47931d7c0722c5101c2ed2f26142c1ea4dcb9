@@ -1,0 +1,10 @@
+Code-Review+1: Marc Koderer <marc@koderer.com>
+Code-Review+2: Kaitlin Farr <kaitlin.farr@jhuapl.edu>
+Code-Review+1: Jeremy Liu <liujiong@gohighsec.com>
+Workflow+1: Juan Antonio Osorio Robles <jaosorior@redhat.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 08 Dec 2016 12:13:11 +0000
+Reviewed-on: https://review.openstack.org/392020
+Project: openstack/deb-barbican
+Branch: refs/heads/master
