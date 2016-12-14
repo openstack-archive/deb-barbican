@@ -103,8 +103,7 @@ Depends: alembic (>= 0.8.4),
 Description: OpenStack Key Management Service - Python files
  The Barbican project provides services for secure storage, provisioning and
  management of sensitive client secret information such as encryption keys. It
- is aims at being useful for all environments, including large ephemeral
- Clouds.
+ aims at being useful for all environments, including large ephemeral Clouds.
  .
  This package contains the Python files and libraries.
 
@@ -120,8 +119,7 @@ Depends: adduser,
 Description: OpenStack Key Management Service - common files
  The Barbican project provides services for secure storage, provisioning and
  management of sensitive client secret information such as encryption keys. It
- is aims at being useful for all environments, including large ephemeral
- Clouds.
+ aims at being useful for all environments, including large ephemeral Clouds.
  .
  This package contains common files for Barbican.
 
@@ -136,8 +134,7 @@ Depends: adduser,
 Description: OpenStack Key Management Service - API Server
  The Barbican project provides services for secure storage, provisioning and
  management of sensitive client secret information such as encryption keys. It
- is aims at being useful for all environments, including large ephemeral
- Clouds.
+ aims at being useful for all environments, including large ephemeral Clouds.
  .
  This package contains the Barbican API Server.
 
@@ -149,7 +146,7 @@ Depends: barbican-common (= ${binary:Version}),
 Description: OpenStack Key Management Service - Worker Node
  The Barbican project provides services for secure storage, provisioning and
  management of sensitive client secret information such as encryption keys. It
- is aims at being useful for all environments, including large ephemeral
+ aims at being useful for all environments, including large ephemeral
  Clouds.
  .
  This package contains the Barbican Worker Node.
@@ -162,8 +159,7 @@ Depends: barbican-common (= ${binary:Version}),
 Description: OpenStack Key Management Service - Keystone Listener
  The Barbican project provides services for secure storage, provisioning and
  management of sensitive client secret information such as encryption keys. It
- is aims at being useful for all environments, including large ephemeral
- Clouds.
+ aims at being useful for all environments, including large ephemeral Clouds.
  .
  This package contains the Barbican Keystone Listener daemon.
 
@@ -174,7 +170,6 @@ Depends: ${misc:Depends}, ${sphinxdoc:Depends}
 Description: OpenStack Key Management Service - doc
  The Barbican project provides services for secure storage, provisioning and
  management of sensitive client secret information such as encryption keys. It
- is aims at being useful for all environments, including large ephemeral
- Clouds.
+ aims at being useful for all environments, including large ephemeral Clouds.
  .
  This package contains the documentation.
