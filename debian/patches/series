@@ -4,3 +4,4 @@ repair-broken-migration-scripts.patch
 fix-barbican-api.patch
 fixes-keystone_authtoken-in-config-file.patch
 fix-requirements.txt.patch
+allow_newer_sqlalchemy.patch

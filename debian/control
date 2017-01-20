@@ -127,7 +127,7 @@ Package: barbican-api
 Architecture: all
 Depends: adduser,
          barbican-common (= ${binary:Version}),
-         lsb-base,
+         ${ostack-lsb-base},
          python-openstackclient,
          q-text-as-data,
          ${misc:Depends},
@@ -142,7 +142,7 @@ Description: OpenStack Key Management Service - API Server
 Package: barbican-worker
 Architecture: all
 Depends: barbican-common (= ${binary:Version}),
-         lsb-base,
+         ${ostack-lsb-base},
          ${misc:Depends},
          ${python:Depends}
 Description: OpenStack Key Management Service - Worker Node
@@ -156,7 +156,7 @@ Description: OpenStack Key Management Service - Worker Node
 Package: barbican-keystone-listener
 Architecture: all
 Depends: barbican-common (= ${binary:Version}),
-         lsb-base,
+         ${ostack-lsb-base},
          ${misc:Depends},   
          ${python:Depends}
 Description: OpenStack Key Management Service - Keystone Listener
