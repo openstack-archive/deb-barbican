@@ -1,0 +1,12 @@
+Code-Review+2: Ade Lee <alee@redhat.com>
+Code-Review+2: Fernando Diaz <diazjf@us.ibm.com>
+Code-Review+2: Kaitlin Farr <kaitlin.farr@jhuapl.edu>
+Code-Review+1: Emilien Macchi <emilien@redhat.com>
+Code-Review+2: Dave McCowan <dmccowan@cisco.com>
+Workflow+1: Dave McCowan <dmccowan@cisco.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 31 Jan 2017 01:12:55 +0000
+Reviewed-on: https://review.openstack.org/426893
+Project: openstack/deb-barbican
+Branch: refs/heads/master
