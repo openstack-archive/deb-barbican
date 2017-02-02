@@ -1,0 +1,9 @@
+Code-Review+2: Ade Lee <alee@redhat.com>
+Code-Review+2: Dave McCowan <dmccowan@cisco.com>
+Workflow+1: Dave McCowan <dmccowan@cisco.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 31 Jan 2017 19:48:16 +0000
+Reviewed-on: https://review.openstack.org/427313
+Project: openstack/deb-barbican
+Branch: refs/heads/master
