@@ -1,3 +1,10 @@
+barbican (1:3.0.0-2) unstable; urgency=medium
+
+  * Team upload.
+  * Dependency added: net-tools (Closes: #858219)
+
+ -- David Rabel <david.rabel@noresoft.com>  Sun, 19 Mar 2017 22:44:48 +0100
+
 barbican (1:3.0.0-1) unstable; urgency=medium
 
   * Team upload.

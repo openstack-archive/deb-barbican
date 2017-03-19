@@ -127,6 +127,7 @@ Package: barbican-api
 Architecture: all
 Depends: adduser,
          barbican-common (= ${binary:Version}),
+         net-tools,
          ${ostack-lsb-base},
          python-openstackclient,
          q-text-as-data,
