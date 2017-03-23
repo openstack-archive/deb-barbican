@@ -1,0 +1,11 @@
+Code-Review+2: Steve Heyman <steve.heyman@rackspace.com>
+Code-Review+1: dane-fichter <dane.fichter@jhuapl.edu>
+Code-Review+1: Jeremy Liu <liujiong@gohighsec.com>
+Code-Review+2: Dave McCowan <dmccowan@cisco.com>
+Workflow+1: Dave McCowan <dmccowan@cisco.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 22 Mar 2017 04:29:56 +0000
+Reviewed-on: https://review.openstack.org/437747
+Project: openstack/deb-barbican
+Branch: refs/heads/master
