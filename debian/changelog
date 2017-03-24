@@ -1,3 +1,10 @@
+barbican (1:3.0.0-3) unstable; urgency=medium
+
+  * Blacklist unit tests *WhenUsingMessageServer* that are using
+    python-vine, not available in Jessie & Stretch (Closes: #858540).
+
+ -- Thomas Goirand <zigo@debian.org>  Fri, 24 Mar 2017 16:53:03 +0100
+
 barbican (1:3.0.0-2) unstable; urgency=medium
 
   * Team upload.
