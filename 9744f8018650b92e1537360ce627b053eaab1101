@@ -1,0 +1,10 @@
+Code-Review+1: Adam Harwell <flux.adam@gmail.com>
+Code-Review+2: Dave McCowan <dmccowan@cisco.com>
+Code-Review+1: Jeremy Liu <liujiong@gohighsec.com>
+Workflow+1: Juan Antonio Osorio Robles <jaosorior@redhat.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 27 Mar 2017 08:02:00 +0000
+Reviewed-on: https://review.openstack.org/430471
+Project: openstack/deb-barbican
+Branch: refs/heads/master
