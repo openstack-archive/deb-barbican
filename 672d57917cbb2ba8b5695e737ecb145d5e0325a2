@@ -1,0 +1,11 @@
+Code-Review+1: Jeremy Liu <liujiong@gohighsec.com>
+Code-Review+1: Spencer Yu <yushb@gohighsec.com>
+Code-Review+2: Juan Antonio Osorio Robles <jaosorior@redhat.com>
+Code-Review+2: Fernando Diaz <diazjf@us.ibm.com>
+Workflow+1: Fernando Diaz <diazjf@us.ibm.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 28 Mar 2017 03:31:02 +0000
+Reviewed-on: https://review.openstack.org/449323
+Project: openstack/deb-barbican
+Branch: refs/heads/master
