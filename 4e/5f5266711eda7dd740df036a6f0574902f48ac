@@ -1,0 +1,8 @@
+Code-Review+2: Juan Antonio Osorio Robles <jaosorior@redhat.com>
+Workflow+1: Juan Antonio Osorio Robles <jaosorior@redhat.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 17 May 2017 09:30:07 +0000
+Reviewed-on: https://review.openstack.org/465227
+Project: openstack/deb-barbican
+Branch: refs/heads/master
