@@ -1,0 +1,13 @@
+Code-Review+1: Kaitlin Farr <kaitlin.farr@jhuapl.edu>
+Code-Review+1: Jeremy Liu <liujiong@gohighsec.com>
+Code-Review+1: Dave McCowan <dmccowan@cisco.com>
+Code-Review+1: Erik Olof Gunnar Andersson <eandersson@blizzard.com>
+Code-Review+1: Nam Nguyen Hoai <namnh@vn.fujitsu.com>
+Code-Review+2: Sean Dague <sean@dague.net>
+Workflow+1: Sean Dague <sean@dague.net>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 06 Jun 2017 10:41:06 +0000
+Reviewed-on: https://review.openstack.org/464781
+Project: openstack/deb-barbican
+Branch: refs/heads/stable/ocata
