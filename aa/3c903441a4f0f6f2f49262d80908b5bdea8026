@@ -1,0 +1,13 @@
+Code-Review+2: Juan Antonio Osorio Robles <jaosorior@redhat.com>
+Code-Review+1: Nguyen Hung Phuong <phuongnh@vn.fujitsu.com>
+Code-Review+1: Tovin Seven <vinhnt@vn.fujitsu.com>
+Code-Review+1: Van Hung Pham <hungpv@vn.fujitsu.com>
+Code-Review+1: Hieu LE <hieulq@vn.fujitsu.com>
+Code-Review+2: Jeremy Liu <liujiong@gohighsec.com>
+Workflow+1: Jeremy Liu <liujiong@gohighsec.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 07 Jun 2017 10:19:11 +0000
+Reviewed-on: https://review.openstack.org/471581
+Project: openstack/deb-barbican
+Branch: refs/heads/master
