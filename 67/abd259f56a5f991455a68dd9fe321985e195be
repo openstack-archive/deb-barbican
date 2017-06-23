@@ -1,0 +1,18 @@
+Code-Review+1: Juan Antonio Osorio Robles <jaosorior@redhat.com>
+Code-Review+1: Alex Szarka <szarka@inf.u-szeged.hu>
+Code-Review+1: Kaitlin Farr <kaitlin.farr@jhuapl.edu>
+Code-Review+1: Jeremy Liu <liujiong@gohighsec.com>
+Code-Review+1: Peter Hamilton <peter.hamilton@jhuapl.edu>
+Code-Review+1: Konstantin Baikov <konstantin.baikov@gmail.com>
+Code-Review+1: Johannes Grassler <jgr-launchpad@btw23.de>
+Code-Review+1: Jackie Truong <jacklyn.truong@jhuapl.edu>
+Code-Review+1: Nam Nguyen Hoai <namnh@vn.fujitsu.com>
+Code-Review+2: Tony Breeds <tony@bakeyournoodle.com>
+Code-Review+2: Matthew Treinish <mtreinish@kortar.org>
+Workflow+1: Matthew Treinish <mtreinish@kortar.org>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 23 Jun 2017 12:35:31 +0000
+Reviewed-on: https://review.openstack.org/453495
+Project: openstack/deb-barbican
+Branch: refs/heads/stable/ocata
