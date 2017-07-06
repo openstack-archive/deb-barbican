@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.abspath('../..'))
 extensions = [
     'sphinx.ext.autodoc',
     # 'sphinx.ext.intersphinx',
-    'oslosphinx'
+    'openstackdocstheme'
 ]
 
 # autodoc generation is a bit aggressive and a nuisance when doing heavy
@@ -54,7 +54,7 @@ pygments_style = 'sphinx'
 # The theme to use for HTML and HTML Help pages.  Major themes that come with
 # Sphinx are currently 'default' and 'sphinxdoc'.
 # html_theme_path = ["."]
-# html_theme = '_theme'
+# html_theme = 'openstackdocs'
 # html_static_path = ['static']
 html_theme_options = {}
 
@@ -73,3 +73,9 @@ latex_documents = [
 
 # Example configuration for intersphinx: refer to the Python standard library.
 # intersphinx_mapping = {'http://docs.python.org/': None}
+html_last_updated_fmt = '%Y-%m-%d %H:%M'
+
+# -- Options for openstackdocstheme -------------------------------------------
+repository_name = 'openstack/barbican'
+ug_project = project.lower()
+bug_tag = ''
